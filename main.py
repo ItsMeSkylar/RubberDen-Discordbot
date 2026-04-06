@@ -28,7 +28,7 @@ def start_http():
 
 BASE_URL = "http://localhost/api"
 INTERNAL_TOKEN = "abc123"
-BOTS_CHANNEL = 1231050220633325628
+CHANNEL_IDS: dict = config["channels"]
 
 # ─────────────────────────────
 # Discord bot
@@ -67,7 +67,9 @@ async def postSchedule(payload: dict):
 
 
 async def _post_payload(payload: dict):
-    channel = client.get_channel(BOTS_CHANNEL) or await client.fetch_channel(BOTS_CHANNEL)
+    site = payload.get("channel") or "bots"
+    channel_id = CHANNEL_IDS.get(site) or CHANNEL_IDS["bots"]
+    channel = client.get_channel(channel_id) or await client.fetch_channel(channel_id)
 
     header_text = payload.get("header") or ""
     footer_text = payload.get("footer") or ""
