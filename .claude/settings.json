@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs grep:*)",
+      "Bash(.venv/Scripts/pip install:*)",
+      "Bash(python -m pip install python-dotenv==1.1.0 --target .venv/Lib/site-packages)",
+      "Bash(mkdir -p \"f:/Dropbox/Apps/Shared/pythonScript/env\")",
+      "Bash(mv \"f:/Dropbox/Apps/Shared/pythonScript/.env.dev\" \"f:/Dropbox/Apps/Shared/pythonScript/env/.env.dev\")",
+      "Bash(mv \"f:/Dropbox/Apps/Shared/pythonScript/.env.prod.example\" \"f:/Dropbox/Apps/Shared/pythonScript/env/.env.prod.example\")",
+      "Bash(py -m pip install python-dotenv==1.1.0)",
+      "Bash(py -m pip install pytest pytest-asyncio)",
+      "Bash(py -m pytest tests/ -v)"
+    ]
+  }
+}

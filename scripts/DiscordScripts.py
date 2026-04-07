@@ -1,11 +1,13 @@
 import io
-import traceback
+import logging
 import asyncio
 import threading
 from typing import Callable
 
 import discord
 import aiohttp
+
+log = logging.getLogger(__name__)
 
 BOT_LOOP: asyncio.AbstractEventLoop | None = None
 
@@ -57,11 +59,10 @@ async def post_payload(
                     video_link = r.headers.get("X-Video-Link")
 
                 downloaded.append((filename, data, desc, ct, video_link, file_path))
-                print("OK:", filename, "bytes:", len(data), "ct:", ct, "video:", bool(video_link))
+                log.info("OK: %s  bytes: %d  ct: %s  video: %s", filename, len(data), ct, bool(video_link))
 
             except Exception:
-                print("FAILED ITEM:", item)
-                traceback.print_exc()
+                log.error("FAILED ITEM: %s", item, exc_info=True)
                 raise
 
     def is_image(name: str, ct: str) -> bool:
@@ -101,6 +102,17 @@ async def post_payload(
     )
 
 
+async def post_failure(payload: dict, client: discord.Client, channel_ids: dict):
+    channel_id = channel_ids["bots"]
+    channel = client.get_channel(channel_id) or await client.fetch_channel(channel_id)
+
+    error = payload.get("error") or "unknown error"
+    site = payload.get("site") or "unknown"
+    entry_id = payload.get("entry_id") or "?"
+
+    await channel.send(f"❌ **Cron job failed**\nSite: `{site}` | Entry: `{entry_id}`\n```{error}```")
+
+
 def setup(
     client: discord.Client,
     config: dict,
@@ -125,8 +137,8 @@ def setup(
 
         await client.change_presence(activity=discord.Game(name="Sqrrrks~"))
         await client.tree.sync()
-        print("Command tree synced successfully.")
-        print("JenniferBot ready!")
+        log.info("Command tree synced successfully.")
+        log.info("JenniferBot ready!")
 
     @client.tree.command(name="clear_all_messages")
     async def clear_all_messages(

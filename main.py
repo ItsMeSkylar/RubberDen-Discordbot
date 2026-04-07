@@ -1,8 +1,11 @@
 import json
 import asyncio
+import logging
+import os
 
 import discord
 from discord.ext import commands
+from dotenv import load_dotenv
 from fastapi import FastAPI
 import uvicorn
 
@@ -12,14 +15,38 @@ from scripts import DiscordScripts
 # Config / tokens
 # ─────────────────────────────
 
-with open("config.json") as f:
-    config = json.load(f)
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+)
 
-with open("tokens/TOKEN_DISCORD.txt") as f:
-    TOKEN_DISCORD = f.read().strip()
+APP_ENV = os.environ.get("APP_ENV", "dev")
+load_dotenv(f"env/.env.{APP_ENV}")
 
-BASE_URL = "http://localhost/api"
-INTERNAL_TOKEN = "abc123"
+_missing = [v for v in ("BASE_URL", "INTERNAL_TOKEN") if not os.environ.get(v)]
+if _missing:
+    raise SystemExit(f"Missing required env vars: {', '.join(_missing)}")
+
+BASE_URL = os.environ["BASE_URL"]
+INTERNAL_TOKEN = os.environ["INTERNAL_TOKEN"]
+
+try:
+    with open("config.json") as f:
+        config = json.load(f)
+except FileNotFoundError:
+    raise SystemExit("config.json not found")
+except json.JSONDecodeError as e:
+    raise SystemExit(f"config.json is invalid JSON: {e}")
+
+try:
+    with open("tokens/TOKEN_DISCORD.txt") as f:
+        TOKEN_DISCORD = f.read().strip()
+except FileNotFoundError:
+    raise SystemExit("tokens/TOKEN_DISCORD.txt not found")
+
+if not TOKEN_DISCORD:
+    raise SystemExit("tokens/TOKEN_DISCORD.txt is empty")
+
 CHANNEL_IDS: dict = config["channels"]
 
 # ─────────────────────────────
@@ -64,6 +91,24 @@ async def postSchedule(payload: dict):
 
     try:
         fut.result(timeout=60)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    return {"ok": True}
+
+
+@app.post("/notify-failure")
+async def notifyFailure(payload: dict):
+    if DiscordScripts.BOT_LOOP is None:
+        return {"ok": False, "error": "bot not ready yet"}
+
+    fut = asyncio.run_coroutine_threadsafe(
+        DiscordScripts.post_failure(payload, client, CHANNEL_IDS),
+        DiscordScripts.BOT_LOOP,
+    )
+
+    try:
+        fut.result(timeout=10)
     except Exception as e:
         return {"ok": False, "error": str(e)}
 

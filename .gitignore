@@ -4,3 +4,5 @@ TOKEN_DROPBOX.txt
 /creds.json
 __pycache__/
 /tokens/
+env/.env.dev
+env/.env.prod
