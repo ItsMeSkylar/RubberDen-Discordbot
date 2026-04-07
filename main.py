@@ -97,6 +97,24 @@ async def postSchedule(payload: dict):
     return {"ok": True}
 
 
+@app.post("/notify-session-expired")
+async def notifySessionExpired(payload: dict):
+    if DiscordScripts.BOT_LOOP is None:
+        return {"ok": False, "error": "bot not ready yet"}
+
+    fut = asyncio.run_coroutine_threadsafe(
+        DiscordScripts.post_session_expired(payload, client, CHANNEL_IDS),
+        DiscordScripts.BOT_LOOP,
+    )
+
+    try:
+        fut.result(timeout=10)
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
+
+    return {"ok": True}
+
+
 @app.post("/notify-failure")
 async def notifyFailure(payload: dict):
     if DiscordScripts.BOT_LOOP is None:

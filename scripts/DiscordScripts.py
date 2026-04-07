@@ -151,6 +151,20 @@ async def post_payload(
     )
 
 
+async def post_session_expired(payload: dict, client: discord.Client, channel_ids: dict):
+    channel_id = channel_ids["bots"]
+    channel = client.get_channel(channel_id) or await client.fetch_channel(channel_id)
+
+    site = payload.get("site") or "unknown"
+    platform = site.capitalize()
+
+    await channel.send(
+        f"⚠️ **Session expired: {platform}**\n"
+        f"Run this on your local machine to refresh:\n"
+        f"```\npython scripts/refresh-session.py {site.lower()}\n```"
+    )
+
+
 async def post_failure(payload: dict, client: discord.Client, channel_ids: dict):
     channel_id = channel_ids["bots"]
     channel = client.get_channel(channel_id) or await client.fetch_channel(channel_id)
