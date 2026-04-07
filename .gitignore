@@ -6,3 +6,5 @@ __pycache__/
 /tokens/
 env/.env.dev
 env/.env.prod
+env/.env.prod.local
+venv/
