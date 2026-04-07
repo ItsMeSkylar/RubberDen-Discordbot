@@ -9,7 +9,9 @@
       "Bash(mv \"f:/Dropbox/Apps/Shared/pythonScript/.env.prod.example\" \"f:/Dropbox/Apps/Shared/pythonScript/env/.env.prod.example\")",
       "Bash(py -m pip install python-dotenv==1.1.0)",
       "Bash(py -m pip install pytest pytest-asyncio)",
-      "Bash(py -m pytest tests/ -v)"
+      "Bash(py -m pytest tests/ -v)",
+      "Bash(ffmpeg -version)",
+      "Bash(py -m pytest tests/test_scrubber.py -v)"
     ]
   }
 }

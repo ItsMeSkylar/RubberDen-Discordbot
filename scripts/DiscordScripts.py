@@ -1,6 +1,8 @@
 import io
 import logging
 import asyncio
+import os
+import tempfile
 import threading
 from typing import Callable
 
@@ -10,6 +12,52 @@ import aiohttp
 log = logging.getLogger(__name__)
 
 BOT_LOOP: asyncio.AbstractEventLoop | None = None
+
+_VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".flv"}
+
+
+async def scrub_metadata_bytes(data: bytes, filename: str) -> bytes:
+    """Strip EXIF/metadata from image or video bytes using ffmpeg. Returns scrubbed bytes."""
+    ext = os.path.splitext(filename)[1].lower() or ".bin"
+    is_video = ext in _VIDEO_EXTS
+
+    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_in:
+        tmp_in.write(data)
+        in_path = tmp_in.name
+
+    out_fd, out_path = tempfile.mkstemp(suffix=ext)
+    os.close(out_fd)
+
+    try:
+        args = ["ffmpeg", "-y", "-i", in_path, "-map_metadata", "-1"]
+        if is_video:
+            args += ["-c", "copy"]
+        else:
+            args += ["-q:v", "2"]
+        args.append(out_path)
+
+        proc = await asyncio.create_subprocess_exec(
+            *args,
+            stdout=asyncio.subprocess.DEVNULL,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        _, stderr = await proc.communicate()
+
+        if proc.returncode != 0:
+            log.warning("ffmpeg metadata scrub failed for %s: %s", filename, stderr[-500:].decode(errors="replace"))
+            return data  # fall back to original
+
+        with open(out_path, "rb") as f:
+            return f.read()
+    finally:
+        try:
+            os.unlink(in_path)
+        except OSError:
+            pass
+        try:
+            os.unlink(out_path)
+        except OSError:
+            pass
 
 
 async def post_payload(
@@ -58,6 +106,7 @@ async def post_payload(
                     ct = (r.headers.get("Content-Type") or "").lower()
                     video_link = r.headers.get("X-Video-Link")
 
+                data = await scrub_metadata_bytes(data, filename)
                 downloaded.append((filename, data, desc, ct, video_link, file_path))
                 log.info("OK: %s  bytes: %d  ct: %s  video: %s", filename, len(data), ct, bool(video_link))
 
