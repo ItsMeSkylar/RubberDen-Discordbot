@@ -8,18 +8,28 @@ from typing import Callable
 
 import discord
 import aiohttp
+from PIL import Image, ImageOps
 
 log = logging.getLogger(__name__)
 
 BOT_LOOP: asyncio.AbstractEventLoop | None = None
 
 _VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".flv"}
+_IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 
-async def scrub_metadata_bytes(data: bytes, filename: str) -> bytes:
-    """Strip EXIF/metadata from image or video bytes using ffmpeg. Returns scrubbed bytes."""
+def scrub_image_bytes(data: bytes) -> bytes:
+    """Apply EXIF orientation physically, then strip all metadata. Returns scrubbed bytes."""
+    img = Image.open(io.BytesIO(data))
+    img = ImageOps.exif_transpose(img)  # physically rotate based on EXIF orientation
+    out = io.BytesIO()
+    img.save(out, format="JPEG", quality=95)
+    return out.getvalue()
+
+
+async def scrub_video_bytes(data: bytes, filename: str) -> bytes:
+    """Strip metadata from video bytes using ffmpeg. Returns scrubbed bytes."""
     ext = os.path.splitext(filename)[1].lower() or ".bin"
-    is_video = ext in _VIDEO_EXTS
 
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp_in:
         tmp_in.write(data)
@@ -29,12 +39,7 @@ async def scrub_metadata_bytes(data: bytes, filename: str) -> bytes:
     os.close(out_fd)
 
     try:
-        args = ["ffmpeg", "-y", "-i", in_path, "-map_metadata", "-1"]
-        if is_video:
-            args += ["-c", "copy"]
-        else:
-            args += ["-q:v", "2"]
-        args.append(out_path)
+        args = ["ffmpeg", "-y", "-i", in_path, "-map_metadata", "-1", "-c", "copy", out_path]
 
         proc = await asyncio.create_subprocess_exec(
             *args,
@@ -58,6 +63,19 @@ async def scrub_metadata_bytes(data: bytes, filename: str) -> bytes:
             os.unlink(out_path)
         except OSError:
             pass
+
+
+async def scrub_metadata_bytes(data: bytes, filename: str) -> bytes:
+    ext = os.path.splitext(filename)[1].lower() or ".bin"
+    if ext in _IMAGE_EXTS:
+        try:
+            return scrub_image_bytes(data)
+        except Exception as e:
+            log.warning("Pillow scrub failed for %s: %s", filename, e)
+            return data
+    if ext in _VIDEO_EXTS:
+        return await scrub_video_bytes(data, filename)
+    return data
 
 
 async def post_payload(

@@ -2,8 +2,7 @@ discord.py==2.3.2
 pytest==9.0.2
 pytest-asyncio==1.3.0
 python-dotenv==1.1.0
-piexif==piexif-1.1.3
+piexif==1.1.3
 pillow==10.3.0
-ffmpeg==6.1.1
 fastapi==0.128.5
 uvicorn==0.40.0
