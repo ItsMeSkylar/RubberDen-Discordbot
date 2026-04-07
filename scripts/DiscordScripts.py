@@ -124,7 +124,8 @@ async def post_payload(
                     ct = (r.headers.get("Content-Type") or "").lower()
                     video_link = r.headers.get("X-Video-Link")
 
-                data = await scrub_metadata_bytes(data, filename)
+                scrub_name = (filename.rsplit(".", 1)[0] + ".jpg") if video_link else filename
+                data = await scrub_metadata_bytes(data, scrub_name)
                 downloaded.append((filename, data, desc, ct, video_link, file_path))
                 log.info("OK: %s  bytes: %d  ct: %s  video: %s", filename, len(data), ct, bool(video_link))
 
