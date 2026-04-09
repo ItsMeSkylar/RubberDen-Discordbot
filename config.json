@@ -1,6 +1,6 @@
 {
-    "whitelist": ["skylarfolf","kimkip"],
-    "permitted-id-clear-all-messages": [1228035866912620599, 1228868450634436717, 1231050220633325628],
+    "whitelist": [99122589074468864],
+    "permitted-id-clear-all-messages": [99122589074468864],
     "channels": {
         "bots": 1231050220633325628,
         "shiny": 1456431888477454399,

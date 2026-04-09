@@ -11,7 +11,14 @@
       "Bash(py -m pip install pytest pytest-asyncio)",
       "Bash(py -m pytest tests/ -v)",
       "Bash(ffmpeg -version)",
-      "Bash(py -m pytest tests/test_scrubber.py -v)"
+      "Bash(py -m pytest tests/test_scrubber.py -v)",
+      "Bash(grep -n \"postSchedule\\\\|notifySessionExpired\\\\|notifyFailure\\\\|test.*post.*schedule\\\\|test.*notify\" \"f:\\\\Dropbox\\\\Apps\\\\Shared\\\\pythonScript\\\\tests\"/*.py)",
+      "Bash(grep -E \"\\\\.\\(md|txt|cfg|ini|toml|yaml|yml|lock\\)$\")",
+      "Bash(grep -r \"password\\\\|secret\\\\|key\" /f/Dropbox/Apps/Shared/pythonScript/*.json /f/Dropbox/Apps/Shared/pythonScript/env/)",
+      "Bash(grep -n \"^async def test\\\\|^def test\" /f/Dropbox/Apps/Shared/pythonScript/tests/test_*.py)",
+      "Bash(xargs ls:*)",
+      "Bash(python3 -m json.tool)",
+      "Bash(python3 -c \"import sys; sys.path.insert\\(0, '/f/Dropbox/Apps/Shared/pythonScript'\\); from main import *\")"
     ]
   }
 }

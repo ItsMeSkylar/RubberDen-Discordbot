@@ -215,7 +215,14 @@ def setup(
 
         if not _http_started[0]:
             _http_started[0] = True
-            threading.Thread(target=start_http, daemon=True).start()
+
+            def _run_http_safe():
+                try:
+                    start_http()
+                except Exception:
+                    log.error("HTTP server crashed", exc_info=True)
+
+            threading.Thread(target=_run_http_safe, daemon=False, name="http-server").start()
 
         await client.change_presence(activity=discord.Game(name="Sqrrrks~"))
         await client.tree.sync()
@@ -227,7 +234,7 @@ def setup(
         interaction: discord.Interaction,
         channel: discord.TextChannel,
     ):
-        if interaction.user.name not in config["whitelist"]:
+        if interaction.user.id not in config["whitelist"]:
             return await interaction.response.send_message("Not authorized")
 
         if channel.id not in config["permitted-id-clear-all-messages"]:
