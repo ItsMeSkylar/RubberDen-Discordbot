@@ -125,17 +125,14 @@ async def _download_file(
     if not file_path:
         raise RuntimeError(f"file missing filename/fileDir: {item}")
 
-    # Reject paths with traversal sequences or absolute paths.
-    # Explicit string checks supplement os.path.isabs(), which returns
-    # False for POSIX-style "/foo" paths on Windows.
-    normalized = os.path.normpath(file_path)
-    if (
-        os.path.isabs(normalized)
-        or normalized.startswith("..")
-        or file_path.startswith("/")
-        or file_path.startswith("\\")
-        or (len(file_path) >= 2 and file_path[1] == ":")  # Windows drive letter
-    ):
+    # Normalize to forward slashes and resolve any . / .. segments.
+    normalized = os.path.normpath(file_path).replace("\\", "/")
+    # Reject traversal sequences and Windows drive letters.
+    if ".." in normalized or (len(file_path) >= 2 and file_path[1] == ":"):
+        raise ValueError(f"Rejected unsafe file path: {file_path!r}")
+    # Absolute paths are only allowed under the expected content root.
+    _ALLOWED_PREFIX = "/Apps/Shared/content/"
+    if normalized.startswith("/") and not normalized.startswith(_ALLOWED_PREFIX):
         raise ValueError(f"Rejected unsafe file path: {file_path!r}")
 
     filename = file_path.rsplit("/", 1)[-1]

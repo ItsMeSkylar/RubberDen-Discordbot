@@ -52,7 +52,9 @@
       "Bash(python -m pytest tests/ -x -q)",
       "Bash(python -c \"import discord; print\\(discord.__version__\\)\")",
       "Read(//c/Users/Skylar/RubberDen/Backend/**)",
-      "Bash(cat \"C:/Users/Skylar/RubberDen/Backend/environments/\"*.example)"
+      "Bash(cat \"C:/Users/Skylar/RubberDen/Backend/environments/\"*.example)",
+      "Bash(python -m pytest tests/test_post_payload.py -v)",
+      "Bash(python -m pytest -v)"
     ],
     "additionalDirectories": [
       "C:\\Users\\Skylar\\RubberDen\\Backend\\src\\cron\\dispatchers",
