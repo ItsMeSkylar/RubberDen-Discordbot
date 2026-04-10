@@ -20,6 +20,10 @@ def _client(channel):
     return c
 
 
+async def _chunked(data: bytes):
+    yield data
+
+
 def _mock_session(data=b"bytes", content_type="image/png", status=200, video_link=None):
     """Build a mock session object (not a context manager — _get_http_session returns it directly)."""
     headers = {"Content-Type": content_type}
@@ -28,9 +32,9 @@ def _mock_session(data=b"bytes", content_type="image/png", status=200, video_lin
 
     r = MagicMock()
     r.status = status
-    r.read = AsyncMock(return_value=data)
     r.text = AsyncMock(return_value="error body")
     r.headers = headers
+    r.content.iter_chunked = MagicMock(side_effect=lambda _: _chunked(data))
 
     get_cm = MagicMock()
     get_cm.__aenter__ = AsyncMock(return_value=r)

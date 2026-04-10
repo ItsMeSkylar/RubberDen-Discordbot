@@ -125,6 +125,7 @@ async def _dispatch(coro, timeout: float, name: str):
     """Dispatch a coroutine to the Discord bot loop and await it with a timeout."""
     loop = DiscordScripts.get_bot_loop()
     if loop is None:
+        coro.close()
         return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
 
     fut = asyncio.run_coroutine_threadsafe(coro, loop)
