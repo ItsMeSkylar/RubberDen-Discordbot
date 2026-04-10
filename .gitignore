@@ -1,11 +1,28 @@
-scripts/__pycache__/
+# Python
+__pycache__/
+*.py[cod]
+
+# Virtual environment
+.venv/
+venv/
+
+# Environment / secrets
+env/
+
+# IDE
+.idea/
+.vscode/
+
+# Test / tooling
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Claude
+.claude/
+
+# Legacy
 TOKEN_DISCORD.txt
 TOKEN_DROPBOX.txt
 /creds.json
-__pycache__/
 /tokens/
-env/.env.dev
-env/.env.prod
-env/.env.prod.local
-env/
-venv/

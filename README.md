@@ -119,6 +119,37 @@ All endpoints except `/health` and `/ready` require the `X-Internal-Token` heade
 | POST | `/notify-session-expired` | Post session-expired alert to bots channel (20 req/min) |
 | POST | `/notify-failure` | Post cron failure alert to bots channel (20 req/min) |
 
+### POST /post-schedule
+
+```json
+{
+    "channel": "bots",
+    "header": "optional message text",
+    "footer": "optional embed footer",
+    "files": [
+        {
+            "file_dir": "/Apps/Shared/content/path/to/file.jpg",
+            "filename": "file.jpg",
+            "description": "optional caption"
+        }
+    ]
+}
+```
+
+`file_dir` or `filename` is required per file item (not both). Max 10 files. Either `files` (non-empty) or `header` must be present.
+
+### POST /notify-session-expired
+
+```json
+{ "site": "mysite" }
+```
+
+### POST /notify-failure
+
+```json
+{ "error": "error message", "site": "mysite", "entry_id": "123" }
+```
+
 ## Metrics
 
 `/metrics` exposes Prometheus metrics:
