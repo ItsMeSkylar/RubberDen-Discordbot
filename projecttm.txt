@@ -1,6 +1,0 @@
-https://www.dropbox.com/developers/documentation/http/documentation#authorization
-
-todo:
-    figure out how to post folders
-    figure out posting sfw AND nsfw
-

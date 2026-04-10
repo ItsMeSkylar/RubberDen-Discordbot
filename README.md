@@ -128,3 +128,9 @@ All endpoints except `/health` and `/ready` require the `X-Internal-Token` heade
 - `jenniferbot_scrub_total` — metadata scrub outcomes by media type (`image`/`video`) and outcome (`success`/`failure`/`timeout`)
 - `jenniferbot_discord_send_total` — Discord send outcomes (`success`/`failure`)
 - `jenniferbot_bot_ready` — 1 if bot is connected, 0 otherwise
+
+
+## other
+todo:
+    figure out how to post folders
+    figure out posting sfw AND nsfw

@@ -3,7 +3,7 @@ import struct
 import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from services.DiscordScripts import scrub_metadata_bytes
+from services.scrubber import scrub_metadata_bytes
 
 # Minimal valid JPEG with EXIF marker (APP1 = 0xFFE1)
 # SOI + APP1 marker + length + "Exif\x00\x00" + dummy payload + EOI

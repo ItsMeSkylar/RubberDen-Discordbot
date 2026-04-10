@@ -75,15 +75,21 @@ class PostSchedulePayload(BaseModel):
     footer: str = ""
     files: list[FileItem] = Field(default=[], max_length=10)
 
+    @model_validator(mode="after")
+    def validate_channel(self):
+        if self.channel not in CHANNEL_IDS:
+            raise ValueError(f"unknown channel '{self.channel}', valid: {sorted(CHANNEL_IDS)}")
+        return self
+
 
 class NotifySessionExpiredPayload(BaseModel):
-    site: str = "unknown"
+    site: str = Field(default="unknown", max_length=100)
 
 
 class NotifyFailurePayload(BaseModel):
-    error: str = "unknown error"
-    site: str = "unknown"
-    entry_id: str = "?"
+    error: str = Field(default="unknown error", max_length=1800)
+    site: str = Field(default="unknown", max_length=100)
+    entry_id: str = Field(default="?", max_length=100)
 
 
 # ─────────────────────────────
@@ -115,6 +121,25 @@ def _auth(x_internal_token: Annotated[str | None, Header()] = None):
         raise HTTPException(status_code=401, detail="Unauthorized")
 
 
+async def _dispatch(coro, timeout: float, name: str):
+    """Dispatch a coroutine to the Discord bot loop and await it with a timeout."""
+    loop = DiscordScripts.get_bot_loop()
+    if loop is None:
+        return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
+
+    fut = asyncio.run_coroutine_threadsafe(coro, loop)
+    try:
+        await asyncio.wait_for(asyncio.wrap_future(fut), timeout=timeout)
+    except asyncio.TimeoutError:
+        fut.cancel()
+        log.error("%s timed out", name)
+        return {"ok": False, "error": "timeout"}
+    except Exception as e:
+        log.error("%s failed: %s", name, e, exc_info=True)
+        return {"ok": False, "error": str(e)}
+    return {"ok": True}
+
+
 # ─────────────────────────────
 # Endpoints
 # ─────────────────────────────
@@ -134,74 +159,29 @@ async def ready():
 
 @app.post("/post-schedule")
 @_limiter.limit("10/minute")
-async def postSchedule(request: Request, payload: PostSchedulePayload, _: None = Depends(_auth)):
-    loop = DiscordScripts.get_bot_loop()
-    if loop is None:
-        return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
-
-    fut = asyncio.run_coroutine_threadsafe(
+async def post_schedule(request: Request, payload: PostSchedulePayload, _: None = Depends(_auth)):
+    return await _dispatch(
         DiscordScripts.post_payload(payload.model_dump(), _client, CHANNEL_IDS, BASE_URL, INTERNAL_TOKEN),
-        loop,
+        TIMEOUT_POST_SCHEDULE,
+        "post_schedule",
     )
-
-    try:
-        await asyncio.wait_for(asyncio.wrap_future(fut), timeout=TIMEOUT_POST_SCHEDULE)
-    except asyncio.TimeoutError:
-        fut.cancel()
-        log.error("postSchedule timed out")
-        return {"ok": False, "error": "timeout"}
-    except Exception as e:
-        log.error("postSchedule failed: %s", e, exc_info=True)
-        return {"ok": False, "error": str(e)}
-
-    return {"ok": True}
 
 
 @app.post("/notify-session-expired")
 @_limiter.limit("20/minute")
-async def notifySessionExpired(request: Request, payload: NotifySessionExpiredPayload, _: None = Depends(_auth)):
-    loop = DiscordScripts.get_bot_loop()
-    if loop is None:
-        return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
-
-    fut = asyncio.run_coroutine_threadsafe(
+async def notify_session_expired(request: Request, payload: NotifySessionExpiredPayload, _: None = Depends(_auth)):
+    return await _dispatch(
         DiscordScripts.post_session_expired(payload.model_dump(), _client, CHANNEL_IDS),
-        loop,
+        TIMEOUT_NOTIFY,
+        "notify_session_expired",
     )
-
-    try:
-        await asyncio.wait_for(asyncio.wrap_future(fut), timeout=TIMEOUT_NOTIFY)
-    except asyncio.TimeoutError:
-        fut.cancel()
-        log.error("notifySessionExpired timed out")
-        return {"ok": False, "error": "timeout"}
-    except Exception as e:
-        log.error("notifySessionExpired failed: %s", e, exc_info=True)
-        return {"ok": False, "error": str(e)}
-
-    return {"ok": True}
 
 
 @app.post("/notify-failure")
 @_limiter.limit("20/minute")
-async def notifyFailure(request: Request, payload: NotifyFailurePayload, _: None = Depends(_auth)):
-    loop = DiscordScripts.get_bot_loop()
-    if loop is None:
-        return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
-
-    fut = asyncio.run_coroutine_threadsafe(
+async def notify_failure(request: Request, payload: NotifyFailurePayload, _: None = Depends(_auth)):
+    return await _dispatch(
         DiscordScripts.post_failure(payload.model_dump(), _client, CHANNEL_IDS),
-        loop,
+        TIMEOUT_NOTIFY,
+        "notify_failure",
     )
-
-    try:
-        await asyncio.wait_for(asyncio.wrap_future(fut), timeout=TIMEOUT_NOTIFY)
-    except asyncio.TimeoutError:
-        fut.cancel()
-        log.error("notifyFailure timed out")
-        return {"ok": False, "error": "timeout"}
-    except Exception as e:
-        log.error("notifyFailure failed: %s", e, exc_info=True)
-        return {"ok": False, "error": str(e)}
-
-    return {"ok": True}

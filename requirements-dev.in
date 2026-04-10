@@ -1,4 +1,0 @@
--r requirements.in
-pytest
-pytest-asyncio
-httpx
