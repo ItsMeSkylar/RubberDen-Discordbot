@@ -71,8 +71,8 @@ class FileItem(BaseModel):
 
 class PostSchedulePayload(BaseModel):
     channel: str = "bots"
-    header: str = ""
-    footer: str = ""
+    header: str | None = ""
+    footer: str | None = ""
     files: list[FileItem] = Field(default=[], max_length=10)
 
     @model_validator(mode="after")
