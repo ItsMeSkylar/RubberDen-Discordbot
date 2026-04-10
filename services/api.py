@@ -7,7 +7,7 @@ from typing import Annotated
 
 import discord
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse, Response
+from fastapi.responses import Response
 from prometheus_client import Counter, Histogram, make_asgi_app, REGISTRY
 from prometheus_client.core import GaugeMetricFamily
 from pydantic import BaseModel, Field, model_validator
@@ -16,7 +16,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from .config import BASE_URL, CHANNEL_IDS, INTERNAL_TOKEN, TIMEOUT_POST_SCHEDULE, TIMEOUT_NOTIFY
-from . import DiscordScripts
+from . import discord_scripts
 
 log = logging.getLogger(__name__)
 
@@ -58,14 +58,14 @@ REGISTRY.register(_BotReadyCollector())
 
 
 class FileItem(BaseModel):
-    fileDir: str | None = None
+    file_dir: str | None = None
     filename: str | None = None
     description: str = ""
 
     @model_validator(mode="after")
     def require_path(self):
-        if not self.fileDir and not self.filename:
-            raise ValueError("each file must have 'fileDir' or 'filename'")
+        if not self.file_dir and not self.filename:
+            raise ValueError("each file must have 'file_dir' or 'filename'")
         return self
 
 
@@ -131,10 +131,10 @@ def _auth(x_internal_token: Annotated[str | None, Header()] = None):
 
 async def _dispatch(coro, timeout: float, name: str):
     """Dispatch a coroutine to the Discord bot loop and await it with a timeout."""
-    loop = DiscordScripts.get_bot_loop()
+    loop = discord_scripts.get_bot_loop()
     if loop is None:
         coro.close()
-        return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
+        raise HTTPException(status_code=503, detail="bot not ready yet")
 
     fut = asyncio.run_coroutine_threadsafe(coro, loop)
     try:
@@ -170,7 +170,7 @@ async def ready():
 @_limiter.limit("10/minute")
 async def post_schedule(request: Request, payload: PostSchedulePayload, _: None = Depends(_auth)):
     return await _dispatch(
-        DiscordScripts.post_payload(payload.model_dump(), _client, CHANNEL_IDS, BASE_URL, INTERNAL_TOKEN),
+        discord_scripts.post_payload(payload.model_dump(), _client, CHANNEL_IDS, BASE_URL, INTERNAL_TOKEN),
         TIMEOUT_POST_SCHEDULE,
         "post_schedule",
     )
@@ -180,7 +180,7 @@ async def post_schedule(request: Request, payload: PostSchedulePayload, _: None 
 @_limiter.limit("20/minute")
 async def notify_session_expired(request: Request, payload: NotifySessionExpiredPayload, _: None = Depends(_auth)):
     return await _dispatch(
-        DiscordScripts.post_session_expired(payload.model_dump(), _client, CHANNEL_IDS),
+        discord_scripts.post_session_expired(payload.model_dump(), _client, CHANNEL_IDS),
         TIMEOUT_NOTIFY,
         "notify_session_expired",
     )
@@ -190,7 +190,7 @@ async def notify_session_expired(request: Request, payload: NotifySessionExpired
 @_limiter.limit("20/minute")
 async def notify_failure(request: Request, payload: NotifyFailurePayload, _: None = Depends(_auth)):
     return await _dispatch(
-        DiscordScripts.post_failure(payload.model_dump(), _client, CHANNEL_IDS),
+        discord_scripts.post_failure(payload.model_dump(), _client, CHANNEL_IDS),
         TIMEOUT_NOTIFY,
         "notify_failure",
     )

@@ -121,9 +121,9 @@ async def _download_file(
 
     Returns (filename, data, desc, content_type, video_link, file_path).
     """
-    file_path = item.get("fileDir") or item.get("filename")
+    file_path = item.get("file_dir") or item.get("filename")
     if not file_path:
-        raise RuntimeError(f"file missing filename/fileDir: {item}")
+        raise RuntimeError(f"file missing filename/file_dir: {item}")
 
     # Normalize to forward slashes and resolve any . / .. segments.
     normalized = os.path.normpath(file_path).replace("\\", "/")

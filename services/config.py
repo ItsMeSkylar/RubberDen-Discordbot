@@ -30,7 +30,7 @@ if shutil.which("ffmpeg") is None:
 
 BASE_URL = os.environ["BASE_URL"]
 INTERNAL_TOKEN = os.environ["INTERNAL_TOKEN"]
-TOKEN_DISCORD = os.environ["DISCORD_TOKEN"]
+DISCORD_TOKEN = os.environ["DISCORD_TOKEN"]
 
 # ─────────────────────────────
 # config.json

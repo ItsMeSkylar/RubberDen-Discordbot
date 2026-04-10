@@ -19,7 +19,7 @@ _VIDEO_EXTS = {".mp4", ".mov", ".m4v", ".webm", ".mkv", ".avi", ".flv"}
 _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 
-def scrub_image_bytes(data: bytes) -> bytes:
+def _scrub_image_bytes(data: bytes) -> bytes:
     """Apply EXIF orientation physically, then strip all metadata. Returns scrubbed bytes."""
     img = Image.open(io.BytesIO(data))
     img = ImageOps.exif_transpose(img)  # physically rotate based on EXIF orientation
@@ -30,7 +30,7 @@ def scrub_image_bytes(data: bytes) -> bytes:
     return out.getvalue()
 
 
-async def scrub_video_bytes(data: bytes, filename: str) -> bytes:
+async def _scrub_video_bytes(data: bytes, filename: str) -> bytes:
     """Strip metadata from video bytes using ffmpeg. Returns scrubbed bytes."""
     ext = os.path.splitext(filename)[1].lower() or ".bin"
 
@@ -91,7 +91,7 @@ async def scrub_metadata_bytes(data: bytes, filename: str) -> bytes:
         try:
             loop = asyncio.get_running_loop()
             result = await asyncio.wait_for(
-                loop.run_in_executor(None, scrub_image_bytes, data),
+                loop.run_in_executor(None, _scrub_image_bytes, data),
                 timeout=30,
             )
             _scrub_total.labels(media_type="image", outcome="success").inc()
@@ -105,5 +105,5 @@ async def scrub_metadata_bytes(data: bytes, filename: str) -> bytes:
             _scrub_total.labels(media_type="image", outcome="failure").inc()
             return data
     if ext in _VIDEO_EXTS:
-        return await scrub_video_bytes(data, filename)
+        return await _scrub_video_bytes(data, filename)
     return data

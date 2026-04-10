@@ -22,7 +22,7 @@ else:
     import main  # already imported (e.g. running full test suite)
 
 from services import api
-import services.DiscordScripts as DS
+import services.discord_scripts as DS
 
 _TOKEN = "test-secret"
 _AUTH = {"X-Internal-Token": _TOKEN}
@@ -42,17 +42,16 @@ def _error_future(exc: Exception) -> ConcurrentFuture:
     return fut
 
 
-def _rtcs_ok(coro, _loop):
-    """Side-effect for patching asyncio.run_coroutine_threadsafe to succeed.
-
-    Closes the coroutine immediately to prevent 'coroutine was never awaited'
-    warnings, then returns an already-resolved future.
-    """
-    coro.close()
-    return _done_future()
+def _rtcs_ok():
+    """Return a side-effect for patching asyncio.run_coroutine_threadsafe to succeed."""
+    def _side_effect(coro, _loop):
+        coro.close()
+        return _done_future()
+    return _side_effect
 
 
 def _rtcs_error(exc: Exception):
+    """Return a side-effect for patching asyncio.run_coroutine_threadsafe to fail."""
     def _side_effect(coro, _loop):
         coro.close()
         return _error_future(exc)
@@ -111,7 +110,7 @@ def test_bot_not_ready_returns_503(http, path, body):
     DS._set_bot_loop(None)
     resp = http.post(path, json=body, headers=_AUTH)
     assert resp.status_code == 503
-    assert resp.json() == {"ok": False, "error": "bot not ready yet"}
+    assert resp.json()["detail"] == "bot not ready yet"
 
 
 # ─────────────────────────────────────────────────────
@@ -120,7 +119,7 @@ def test_bot_not_ready_returns_503(http, path, body):
 
 def test_post_schedule_success(http):
     DS._set_bot_loop(MagicMock())
-    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok):
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok()):
         resp = http.post("/post-schedule", json={"files": [], "header": "hi"}, headers=_AUTH)
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
@@ -128,7 +127,7 @@ def test_post_schedule_success(http):
 
 def test_notify_session_expired_success(http):
     DS._set_bot_loop(MagicMock())
-    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok):
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok()):
         resp = http.post("/notify-session-expired", json={"site": "mysite"}, headers=_AUTH)
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
@@ -136,7 +135,7 @@ def test_notify_session_expired_success(http):
 
 def test_notify_failure_success(http):
     DS._set_bot_loop(MagicMock())
-    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok):
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok()):
         resp = http.post(
             "/notify-failure",
             json={"error": "oops", "site": "x", "entry_id": "1"},
@@ -230,7 +229,7 @@ def test_notify_session_expired_internal_error_returns_ok_false(http):
 
 def test_post_schedule_rate_limited_after_10_requests(http):
     DS._set_bot_loop(MagicMock())
-    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok):
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok()):
         for _ in range(10):
             assert http.post("/post-schedule", json={"files": [], "header": "hi"}, headers=_AUTH).status_code == 200
         resp = http.post("/post-schedule", json={"files": [], "header": "hi"}, headers=_AUTH)
@@ -239,7 +238,7 @@ def test_post_schedule_rate_limited_after_10_requests(http):
 
 def test_notify_rate_limited_after_20_requests(http):
     DS._set_bot_loop(MagicMock())
-    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok):
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok()):
         for _ in range(20):
             assert http.post("/notify-failure", json={}, headers=_AUTH).status_code == 200
         resp = http.post("/notify-failure", json={}, headers=_AUTH)
