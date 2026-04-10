@@ -6,12 +6,15 @@ import os
 import shutil
 import signal
 import sys
+import time
 
 import discord
 from discord.ext import commands
 from dotenv import load_dotenv
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.responses import JSONResponse
+from prometheus_client import Counter, Histogram, make_asgi_app, REGISTRY
+from prometheus_client.core import GaugeMetricFamily
 from pydantic import BaseModel, Field, model_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -22,14 +25,63 @@ import uvicorn
 from scripts import DiscordScripts
 
 # ─────────────────────────────
-# Config / tokens
+# Logging (structured JSON)
 # ─────────────────────────────
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
-)
+
+class _JsonFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        obj = {
+            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info:
+            obj["exc"] = self.formatException(record.exc_info)
+        return json.dumps(obj)
+
+
+_handler = logging.StreamHandler()
+_handler.setFormatter(_JsonFormatter())
+logging.basicConfig(level=logging.INFO, handlers=[_handler])
 log = logging.getLogger(__name__)
+
+# ─────────────────────────────
+# Metrics
+# ─────────────────────────────
+
+_http_requests = Counter(
+    "jenniferbot_http_requests_total",
+    "Total HTTP requests",
+    ["endpoint", "status"],
+)
+_http_latency = Histogram(
+    "jenniferbot_http_request_duration_seconds",
+    "HTTP request duration in seconds",
+    ["endpoint"],
+)
+
+
+class _BotReadyCollector:
+    """Dynamically reports bot ready state so the gauge is always current."""
+
+    def collect(self):
+        g = GaugeMetricFamily("jenniferbot_bot_ready", "1 if Discord bot is ready")
+        g.add_metric([], 1.0 if _discord_client_ready() else 0.0)
+        yield g
+
+
+def _discord_client_ready() -> bool:
+    # Resolved after Discord client is created; avoids forward-reference issues.
+    return "client" in globals() and client.is_ready()
+
+
+REGISTRY.register(_BotReadyCollector())
+
+# ─────────────────────────────
+# Config / tokens
+# ─────────────────────────────
 
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
@@ -64,6 +116,10 @@ def _parse_ids(env_var: str) -> list[int]:
 config["whitelist"] = _parse_ids("WHITELIST_IDS")
 config["permitted-id-clear-all-messages"] = _parse_ids("PERMITTED_CLEAR_IDS")
 CHANNEL_IDS: dict = config["channels"]
+
+_bad_channel_ids = {k: v for k, v in CHANNEL_IDS.items() if not isinstance(v, int)}
+if _bad_channel_ids:
+    raise SystemExit(f"config.json channel IDs must be integers, invalid: {_bad_channel_ids}")
 
 _REQUIRED_CHANNELS = {"bots"}
 _missing_channels = _REQUIRED_CHANNELS - set(CHANNEL_IDS.keys())
@@ -122,6 +178,19 @@ _limiter = Limiter(key_func=get_remote_address)
 app.state.limiter = _limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
+app.mount("/metrics", make_asgi_app())
+
+
+@app.middleware("http")
+async def _metrics_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration = time.perf_counter() - start
+    path = request.url.path
+    _http_latency.labels(endpoint=path).observe(duration)
+    _http_requests.labels(endpoint=path, status=str(response.status_code)).inc()
+    return response
+
 
 def _auth(x_internal_token: Annotated[str | None, Header()] = None):
     if not hmac.compare_digest(x_internal_token or "", INTERNAL_TOKEN):
@@ -176,7 +245,7 @@ async def health():
 
 @app.get("/ready")
 async def ready():
-    if DiscordScripts.get_bot_loop() is None:
+    if DiscordScripts.get_bot_loop() is None or not client.is_ready():
         raise HTTPException(status_code=503, detail="bot not ready")
     return {"ok": True}
 

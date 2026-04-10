@@ -9,6 +9,18 @@ from typing import Callable
 import discord
 import aiohttp
 from PIL import Image, ImageOps
+from prometheus_client import Counter
+
+_scrub_total = Counter(
+    "jenniferbot_scrub_total",
+    "Metadata scrub operations",
+    ["media_type", "outcome"],
+)
+_discord_send_total = Counter(
+    "jenniferbot_discord_send_total",
+    "Discord channel.send attempts",
+    ["outcome"],
+)
 
 log = logging.getLogger(__name__)
 
@@ -94,6 +106,7 @@ async def scrub_video_bytes(data: bytes, filename: str) -> bytes:
         except asyncio.TimeoutError:
             proc.kill()
             log.error("ffmpeg timed out for %s, using original", filename)
+            _scrub_total.labels(media_type="video", outcome="timeout").inc()
             return data
 
         if proc.returncode != 0:
@@ -102,8 +115,10 @@ async def scrub_video_bytes(data: bytes, filename: str) -> bytes:
                 filename,
                 stderr[-500:].decode(errors="replace"),
             )
+            _scrub_total.labels(media_type="video", outcome="failure").inc()
             return data  # fall back to original
 
+        _scrub_total.labels(media_type="video", outcome="success").inc()
         with open(out_path, "rb") as f:
             return f.read()
     finally:
@@ -121,9 +136,12 @@ async def scrub_metadata_bytes(data: bytes, filename: str) -> bytes:
     ext = os.path.splitext(filename)[1].lower() or ".bin"
     if ext in _IMAGE_EXTS:
         try:
-            return scrub_image_bytes(data)
+            result = scrub_image_bytes(data)
+            _scrub_total.labels(media_type="image", outcome="success").inc()
+            return result
         except Exception as e:
             log.error("Pillow scrub failed for %s: %s", filename, e)
+            _scrub_total.labels(media_type="image", outcome="failure").inc()
             return data
     if ext in _VIDEO_EXTS:
         return await scrub_video_bytes(data, filename)
@@ -138,9 +156,11 @@ async def _send_with_retry(channel, **kwargs):
     for attempt in range(3):
         try:
             await asyncio.wait_for(channel.send(**kwargs), timeout=_TIMEOUT_DISCORD_SEND)
+            _discord_send_total.labels(outcome="success").inc()
             return
         except discord.HTTPException as e:
             if attempt == 2:
+                _discord_send_total.labels(outcome="failure").inc()
                 raise
             if e.status == 429:
                 retry_after = float(getattr(e, "retry_after", 2 ** attempt))

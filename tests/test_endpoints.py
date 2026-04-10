@@ -5,6 +5,7 @@ The shutil.which patch below prevents the ffmpeg SystemExit from firing
 when main.py is first imported.
 """
 
+import asyncio
 import sys
 from concurrent.futures import Future as ConcurrentFuture
 from unittest.mock import MagicMock, patch
@@ -58,11 +59,20 @@ def _rtcs_error(exc: Exception):
 
 
 @pytest.fixture(autouse=True)
-def isolate_bot_loop():
-    """Save and restore BOT_LOOP around each test for isolation."""
-    saved = DS.BOT_LOOP
+def isolate_bot_state():
+    """Save and restore bot globals around each test for isolation."""
+    saved_loop = DS.BOT_LOOP
+    saved_thread = DS._http_thread
     yield
-    DS._set_bot_loop(saved)
+    DS._set_bot_loop(saved_loop)
+    DS._http_thread = saved_thread
+
+
+@pytest.fixture(autouse=True)
+def reset_limiter():
+    """Clear rate-limit counters before each test so tests don't interfere."""
+    main._limiter.reset()
+    yield
 
 
 @pytest.fixture()
@@ -166,3 +176,77 @@ def test_post_schedule_file_missing_path_rejected(http):
     DS._set_bot_loop(MagicMock())
     resp = http.post("/post-schedule", json={"files": [{"description": "no path"}]}, headers=_AUTH)
     assert resp.status_code == 422
+
+
+# ─────────────────────────────────────────────────────
+# Health / ready endpoints  (fix 2)
+# ─────────────────────────────────────────────────────
+
+def test_health_always_returns_200(http):
+    resp = http.get("/health")
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_ready_returns_503_when_bot_not_ready(http):
+    DS._set_bot_loop(None)
+    resp = http.get("/ready")
+    assert resp.status_code == 503
+
+
+def test_ready_returns_200_when_bot_ready(http):
+    DS._set_bot_loop(MagicMock())
+    resp = http.get("/ready")
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+# ─────────────────────────────────────────────────────
+# Missing error-path coverage  (fix 3)
+# ─────────────────────────────────────────────────────
+
+def test_notify_session_expired_internal_error_returns_ok_false(http):
+    DS._set_bot_loop(MagicMock())
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_error(RuntimeError("discord down"))):
+        resp = http.post("/notify-session-expired", json={}, headers=_AUTH)
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is False
+
+
+# ─────────────────────────────────────────────────────
+# Rate limiting  (fix 4)
+# ─────────────────────────────────────────────────────
+
+def test_post_schedule_rate_limited_after_10_requests(http):
+    DS._set_bot_loop(MagicMock())
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok):
+        for _ in range(10):
+            assert http.post("/post-schedule", json={"files": []}, headers=_AUTH).status_code == 200
+        resp = http.post("/post-schedule", json={"files": []}, headers=_AUTH)
+    assert resp.status_code == 429
+
+
+def test_notify_rate_limited_after_20_requests(http):
+    DS._set_bot_loop(MagicMock())
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok):
+        for _ in range(20):
+            assert http.post("/notify-failure", json={}, headers=_AUTH).status_code == 200
+        resp = http.post("/notify-failure", json={}, headers=_AUTH)
+    assert resp.status_code == 429
+
+
+# ─────────────────────────────────────────────────────
+# Timeout handling  (fix 5)
+# ─────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("path,body", [
+    ("/post-schedule", {"files": []}),
+    ("/notify-session-expired", {}),
+    ("/notify-failure", {}),
+])
+def test_endpoint_timeout_returns_ok_false(http, path, body):
+    DS._set_bot_loop(MagicMock())
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_error(asyncio.TimeoutError())):
+        resp = http.post(path, json=body, headers=_AUTH)
+    assert resp.status_code == 200
+    assert resp.json()["ok"] is False

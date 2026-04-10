@@ -1,0 +1,10 @@
+aiohttp
+discord.py
+python-dotenv
+piexif
+pillow
+fastapi
+pydantic
+uvicorn
+slowapi
+prometheus-client

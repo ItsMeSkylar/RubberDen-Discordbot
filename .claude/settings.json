@@ -34,7 +34,18 @@
       "Bash(python -m pytest tests/test_scrubber.py::test_success_returns_scrubbed_bytes -v)",
       "Bash(python -m pytest tests/ -v)",
       "Bash(grep -E \"\\\\.\\(py|json|txt|md\\)$\")",
-      "Bash(python -m pytest tests/ -q)"
+      "Bash(python -m pytest tests/ -q)",
+      "Bash(grep -E \"\\\\.py$|\\\\.json$|\\\\.txt$|\\\\.md$|\\\\.env\")",
+      "Bash(python -m pytest tests/ --collect-only)",
+      "Bash(grep -n \"TimeoutError\\\\|timeout\\\\|asyncio.wait_for\" tests/*.py)",
+      "Bash(grep -n \"test_notify_session_expired\" tests/*.py)",
+      "Bash(python -c \"import main; l = main._limiter; print\\(type\\(l\\)\\); print\\(dir\\(l\\)\\)\")",
+      "Bash(python -c \"import main; main._limiter.reset\\(\\)\")",
+      "Bash(python -m pytest tests/test_endpoints.py -v)",
+      "Bash(find . -type f -name \"*.py\" ! -path \"./.venv/*\" ! -path \"./__pycache__/*\" ! -path \"*/.pytest_cache/*\" ! -path \"*/.idea/*\" -exec grep -l \"TODO\\\\|FIXME\\\\|HACK\\\\|XXX\" {} \\\\;)",
+      "Bash(grep -r \"password\\\\|secret\\\\|key\\\\|token\" . --include=\"*.py\" ! -path \"./.venv/*\" ! -path \"./__pycache__/*\" ! -path \"*/.pytest_cache/*\" ! -path \"*/.idea/*\")",
+      "Bash(wc -l /f/Dropbox/Apps/Shared/pythonScript/tests/*.py)",
+      "Bash(wc -l \"f:/Dropbox/Apps/Shared/pythonScript/main.py\" \"f:/Dropbox/Apps/Shared/pythonScript/scripts/DiscordScripts.py\" \"f:/Dropbox/Apps/Shared/pythonScript/tests/test_\"*.py)"
     ]
   }
 }
