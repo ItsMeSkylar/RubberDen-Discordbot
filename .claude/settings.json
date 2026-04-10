@@ -18,7 +18,23 @@
       "Bash(grep -n \"^async def test\\\\|^def test\" /f/Dropbox/Apps/Shared/pythonScript/tests/test_*.py)",
       "Bash(xargs ls:*)",
       "Bash(python3 -m json.tool)",
-      "Bash(python3 -c \"import sys; sys.path.insert\\(0, '/f/Dropbox/Apps/Shared/pythonScript'\\); from main import *\")"
+      "Bash(python3 -c \"import sys; sys.path.insert\\(0, '/f/Dropbox/Apps/Shared/pythonScript'\\); from main import *\")",
+      "Bash(python -m pip list)",
+      "Bash(grep -n \"global\\\\|thread\\\\|Thread\\\\|Lock\\\\|RLock\" scripts/*.py main.py)",
+      "Bash(grep -n \"sqlite\\\\|database\\\\|db\\\\|sql\\\\|mongo\\\\|postgres\\\\|redis\" scripts/*.py main.py tests/*.py)",
+      "Bash(grep -n \"CORS\\\\|cors\\\\|CORSMiddleware\\\\|origins\\\\|allow\" scripts/*.py main.py)",
+      "Bash(grep -n \"def test_\\\\|async def test_\" tests/*.py)",
+      "Bash(grep -r \"password\\\\|secret\\\\|key\\\\|token\\\\|credential\" scripts/*.py main.py tests/*.py)",
+      "Bash(grep -n \"path traversal\\\\|unsafe\\\\|security\" tests/*.py scripts/*.py main.py)",
+      "Bash(grep -n \"traversal\\\\|\\\\.\\\\.\\\\/\\\\|absolute\\\\|normpath\" tests/*.py)",
+      "Bash(pip install:*)",
+      "Bash(pip list:*)",
+      "Bash(python -m pytest --collect-only -q)",
+      "Bash(python -m pytest -q)",
+      "Bash(python -m pytest tests/test_scrubber.py::test_success_returns_scrubbed_bytes -v)",
+      "Bash(python -m pytest tests/ -v)",
+      "Bash(grep -E \"\\\\.\\(py|json|txt|md\\)$\")",
+      "Bash(python -m pytest tests/ -q)"
     ]
   }
 }

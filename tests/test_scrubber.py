@@ -1,7 +1,7 @@
+import os
 import struct
+import tempfile
 from unittest.mock import AsyncMock, MagicMock, patch
-
-import pytest
 
 from scripts.DiscordScripts import scrub_metadata_bytes
 
@@ -30,32 +30,22 @@ def _make_proc(returncode=0, stderr=b""):
 
 
 async def test_success_returns_scrubbed_bytes():
-    scrubbed = b"clean image data"
+    """When ffmpeg succeeds, scrub_metadata_bytes returns the output file contents."""
+    scrubbed = b"clean video data"
+
+    real_mkstemp = tempfile.mkstemp
     proc = _make_proc(returncode=0)
 
-    with patch("asyncio.create_subprocess_exec", return_value=proc), \
-         patch("builtins.open", MagicMock(return_value=MagicMock(
-             __enter__=lambda s: MagicMock(read=lambda: scrubbed),
-             __exit__=MagicMock(return_value=False),
-         ))):
-        # We patch open only for the read; write is handled by tempfile
-        pass
-
-    # Use a real temp-file write but mock the subprocess and output read
-    import builtins
-    real_open = builtins.open
-
-    def fake_open(path, mode="r", **kw):
-        if "rb" in mode:
-            m = MagicMock()
-            m.__enter__ = lambda s: MagicMock(read=lambda: scrubbed)
-            m.__exit__ = MagicMock(return_value=False)
-            return m
-        return real_open(path, mode, **kw)
+    def fake_mkstemp(suffix=""):
+        fd, path = real_mkstemp(suffix=suffix)
+        # Pre-populate the output file with the "scrubbed" content so the
+        # code's open(out_path, "rb").read() returns it.
+        os.write(fd, scrubbed)
+        return fd, path
 
     with patch("asyncio.create_subprocess_exec", return_value=proc), \
-         patch("builtins.open", side_effect=fake_open):
-        result = await scrub_metadata_bytes(_PLAIN_JPEG, "photo.jpg")
+         patch("tempfile.mkstemp", side_effect=fake_mkstemp):
+        result = await scrub_metadata_bytes(b"raw video data", "clip.mp4")
 
     assert result == scrubbed
 
@@ -64,13 +54,12 @@ async def test_ffmpeg_failure_returns_original():
     proc = _make_proc(returncode=1, stderr=b"some ffmpeg error")
 
     with patch("asyncio.create_subprocess_exec", return_value=proc):
-        result = await scrub_metadata_bytes(_PLAIN_JPEG, "photo.jpg")
+        result = await scrub_metadata_bytes(_PLAIN_JPEG, "photo.mp4")
 
     assert result == _PLAIN_JPEG
 
 
 async def test_video_uses_copy_codec():
-    proc = _make_proc(returncode=1)  # fail so we don't need to mock file read
     captured = {}
 
     async def fake_exec(*args, **kwargs):
@@ -84,18 +73,12 @@ async def test_video_uses_copy_codec():
     assert "copy" in captured["args"]
 
 
-async def test_image_does_not_use_copy_codec():
-    captured = {}
-
-    async def fake_exec(*args, **kwargs):
-        captured["args"] = args
-        return _make_proc(returncode=1)
-
-    with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
+async def test_image_scrub_does_not_call_ffmpeg():
+    """Images are scrubbed via Pillow, not ffmpeg — create_subprocess_exec must not be called."""
+    with patch("asyncio.create_subprocess_exec") as mock_exec:
         await scrub_metadata_bytes(_PLAIN_JPEG, "photo.png")
 
-    assert "copy" not in captured["args"]
-    assert "-q:v" in captured["args"]
+    mock_exec.assert_not_called()
 
 
 async def test_map_metadata_flag_always_present():
@@ -106,7 +89,7 @@ async def test_map_metadata_flag_always_present():
         return _make_proc(returncode=1)
 
     with patch("asyncio.create_subprocess_exec", side_effect=fake_exec):
-        await scrub_metadata_bytes(_PLAIN_JPEG, "photo.jpg")
+        await scrub_metadata_bytes(b"videodata", "photo.mp4")
 
     assert "-map_metadata" in captured["args"]
     assert "-1" in captured["args"]

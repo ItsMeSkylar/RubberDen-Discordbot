@@ -21,7 +21,7 @@ def _client(channel):
 
 
 def _mock_session(data=b"bytes", content_type="image/png", status=200, video_link=None):
-    """Build a mock aiohttp.ClientSession async context manager."""
+    """Build a mock session object (not a context manager — _get_http_session returns it directly)."""
     headers = {"Content-Type": content_type}
     if video_link:
         headers["X-Video-Link"] = video_link
@@ -39,11 +39,7 @@ def _mock_session(data=b"bytes", content_type="image/png", status=200, video_lin
     session = MagicMock()
     session.get.return_value = get_cm
 
-    cs_cm = MagicMock()
-    cs_cm.__aenter__ = AsyncMock(return_value=session)
-    cs_cm.__aexit__ = AsyncMock(return_value=False)
-
-    return cs_cm
+    return session
 
 
 async def test_image_embed_has_image_and_footer():
@@ -53,7 +49,7 @@ async def test_image_embed_has_image_and_footer():
         "header": "Hello",
         "footer": "Footer text",
     }
-    with patch("aiohttp.ClientSession", return_value=_mock_session(content_type="image/png")):
+    with patch("scripts.DiscordScripts._get_http_session", AsyncMock(return_value=_mock_session(content_type="image/png"))):
         await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
 
     channel.send.assert_called_once()
@@ -69,9 +65,9 @@ async def test_video_uses_thumbnail_and_adds_video_link():
     payload = {
         "files": [{"filename": "clips/clip.mp4", "description": ""}],
     }
-    with patch("aiohttp.ClientSession", return_value=_mock_session(
+    with patch("scripts.DiscordScripts._get_http_session", AsyncMock(return_value=_mock_session(
         content_type="video/mp4", video_link="https://cdn/clip.mp4"
-    )):
+    ))):
         await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
 
     kwargs = channel.send.call_args.kwargs
@@ -83,7 +79,7 @@ async def test_video_uses_thumbnail_and_adds_video_link():
 async def test_missing_filename_raises():
     channel = _channel()
     payload = {"files": [{"description": "no path"}]}
-    with patch("aiohttp.ClientSession", return_value=_mock_session()):
+    with patch("scripts.DiscordScripts._get_http_session", AsyncMock(return_value=_mock_session())):
         with pytest.raises(RuntimeError, match="file missing filename/fileDir"):
             await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
 
@@ -91,7 +87,7 @@ async def test_missing_filename_raises():
 async def test_backend_non_200_raises():
     channel = _channel()
     payload = {"files": [{"filename": "img.png"}]}
-    with patch("aiohttp.ClientSession", return_value=_mock_session(status=404)):
+    with patch("scripts.DiscordScripts._get_http_session", AsyncMock(return_value=_mock_session(status=404))):
         with pytest.raises(RuntimeError, match="backend file failed: 404"):
             await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
 
@@ -100,7 +96,7 @@ async def test_defaults_to_bots_channel_when_channel_missing():
     channel = _channel()
     client = _client(channel)
     payload = {"files": [{"filename": "img.png"}]}  # no "channel" key
-    with patch("aiohttp.ClientSession", return_value=_mock_session()):
+    with patch("scripts.DiscordScripts._get_http_session", AsyncMock(return_value=_mock_session())):
         await post_payload(payload, client, CHANNEL_IDS, BASE_URL, TOKEN)
 
     client.get_channel.assert_called_with(111)
@@ -109,8 +105,68 @@ async def test_defaults_to_bots_channel_when_channel_missing():
 async def test_no_header_sends_none_content():
     channel = _channel()
     payload = {"files": [{"filename": "img.png"}]}  # no "header"
-    with patch("aiohttp.ClientSession", return_value=_mock_session()):
+    with patch("scripts.DiscordScripts._get_http_session", AsyncMock(return_value=_mock_session())):
         await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
 
     kwargs = channel.send.call_args.kwargs
     assert kwargs["content"] is None
+
+
+# ─────────────────────────────────────────────────────
+# Path traversal (#6)
+# ─────────────────────────────────────────────────────
+
+@pytest.mark.parametrize("bad_path", [
+    "../secrets.txt",
+    "../../etc/passwd",
+    "/etc/passwd",
+    "\\Windows\\system32",
+    "C:/Windows/system32",
+    "C:\\Windows",
+])
+async def test_path_traversal_raises(bad_path):
+    channel = _channel()
+    payload = {"files": [{"filename": bad_path}]}
+    with patch("scripts.DiscordScripts._get_http_session", AsyncMock(return_value=_mock_session())):
+        with pytest.raises((ValueError, RuntimeError)):
+            await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
+
+
+# ─────────────────────────────────────────────────────
+# Malformed Content-Length (#5)
+# ─────────────────────────────────────────────────────
+
+async def test_malformed_content_length_is_tolerated():
+    """Non-integer Content-Length should be logged and skipped, not crash."""
+    channel = _channel()
+    payload = {"files": [{"filename": "img.png"}]}
+    mock = _mock_session(data=b"bytes")
+    mock.get.return_value.__aenter__.return_value.headers["Content-Length"] = "not-a-number"
+    with patch("scripts.DiscordScripts._get_http_session", AsyncMock(return_value=mock)), \
+         patch("scripts.DiscordScripts.scrub_metadata_bytes", AsyncMock(return_value=b"bytes")):
+        await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
+    channel.send.assert_called_once()
+
+
+# ─────────────────────────────────────────────────────
+# File size limits (#12)
+# ─────────────────────────────────────────────────────
+
+async def test_file_too_large_via_content_length_raises():
+    channel = _channel()
+    payload = {"files": [{"filename": "big.png"}]}
+    mock = _mock_session()
+    mock.get.return_value.__aenter__.return_value.headers["Content-Length"] = "11"
+    with patch("scripts.DiscordScripts._MAX_DOWNLOAD_BYTES", 10), \
+         patch("scripts.DiscordScripts._get_http_session", AsyncMock(return_value=mock)):
+        with pytest.raises(RuntimeError, match="file too large"):
+            await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
+
+
+async def test_file_too_large_via_body_raises():
+    channel = _channel()
+    payload = {"files": [{"filename": "big.png"}]}
+    with patch("scripts.DiscordScripts._MAX_DOWNLOAD_BYTES", 10), \
+         patch("scripts.DiscordScripts._get_http_session", AsyncMock(return_value=_mock_session(data=b"x" * 11))):
+        with pytest.raises(RuntimeError, match="file too large"):
+            await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)

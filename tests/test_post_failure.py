@@ -21,7 +21,7 @@ async def test_failure_message_contains_payload_fields():
         CHANNEL_IDS,
     )
 
-    msg = channel.send.call_args.args[0]
+    msg = channel.send.call_args.kwargs["content"]
     assert "mysite" in msg
     assert "42" in msg
     assert "timeout" in msg
@@ -33,6 +33,6 @@ async def test_failure_defaults_when_payload_empty():
 
     await post_failure({}, _client(channel), CHANNEL_IDS)
 
-    msg = channel.send.call_args.args[0]
+    msg = channel.send.call_args.kwargs["content"]
     assert "unknown error" in msg
     assert "unknown" in msg

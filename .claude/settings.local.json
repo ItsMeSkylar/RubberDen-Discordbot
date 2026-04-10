@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(grep -n \"async def\\\\|def test\" /f/Dropbox/Apps/Shared/pythonScript/tests/*.py)",
+      "Bash(wc -l /f/Dropbox/Apps/Shared/pythonScript/tests/*.py /f/Dropbox/Apps/Shared/pythonScript/scripts/DiscordScripts.py /f/Dropbox/Apps/Shared/pythonScript/main.py)",
+      "Bash(grep -c \"async def test\\\\|def test\" /f/Dropbox/Apps/Shared/pythonScript/tests/*.py)",
+      "Bash(grep -n \"test.*post.*schedule\\\\|test.*notify\\\\|test.*auth\\\\|test.*endpoint\\\\|test.*http\" /f/Dropbox/Apps/Shared/pythonScript/tests/*.py)",
+      "Bash(python -m pip show httpx starlette)",
+      "Bash(python -m pip install \"httpx>=0.23.0\")"
+    ]
+  }
+}
