@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 import signal
 import sys
@@ -17,21 +16,8 @@ from services import DiscordScripts
 # ─────────────────────────────
 
 
-class _JsonFormatter(logging.Formatter):
-    def format(self, record: logging.LogRecord) -> str:
-        obj = {
-            "ts": self.formatTime(record, "%Y-%m-%dT%H:%M:%S"),
-            "level": record.levelname,
-            "logger": record.name,
-            "msg": record.getMessage(),
-        }
-        if record.exc_info:
-            obj["exc"] = self.formatException(record.exc_info)
-        return json.dumps(obj)
-
-
 _handler = logging.StreamHandler()
-_handler.setFormatter(_JsonFormatter())
+_handler.setFormatter(logging.Formatter("[%(asctime)s] %(levelname)s: %(message)s", datefmt="%Y-%m-%d %H:%M:%S"))
 logging.basicConfig(level=logging.INFO, handlers=[_handler])
 log = logging.getLogger(__name__)
 
