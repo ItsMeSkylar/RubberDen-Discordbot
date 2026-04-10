@@ -348,7 +348,8 @@ def setup(
 
         log.info("JenniferBot ready!")
 
-    @client.tree.command(name="clear_all_messages")
+    @client.tree.command(name="clear_all_messages", description="Purge all messages in a permitted channel")
+    @discord.app_commands.default_permissions(administrator=True)
     async def clear_all_messages(
         interaction: discord.Interaction,
         channel: discord.TextChannel,
@@ -363,3 +364,4 @@ def setup(
 
         await interaction.response.defer()
         await channel.purge(limit=None)
+        await interaction.followup.send("Done")

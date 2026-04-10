@@ -102,10 +102,14 @@ def test_wrong_token_returns_401(http, path):
 # 503 when bot not ready
 # ─────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("path", ["/post-schedule", "/notify-session-expired", "/notify-failure"])
-def test_bot_not_ready_returns_503(http, path):
+@pytest.mark.parametrize("path,body", [
+    ("/post-schedule", {"header": "hi"}),
+    ("/notify-session-expired", {}),
+    ("/notify-failure", {}),
+])
+def test_bot_not_ready_returns_503(http, path, body):
     DS._set_bot_loop(None)
-    resp = http.post(path, json={}, headers=_AUTH)
+    resp = http.post(path, json=body, headers=_AUTH)
     assert resp.status_code == 503
     assert resp.json() == {"ok": False, "error": "bot not ready yet"}
 
@@ -149,7 +153,7 @@ def test_notify_failure_success(http):
 def test_post_schedule_internal_error_returns_ok_false(http):
     DS._set_bot_loop(MagicMock())
     with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_error(RuntimeError("boom"))):
-        resp = http.post("/post-schedule", json={"files": []}, headers=_AUTH)
+        resp = http.post("/post-schedule", json={"files": [], "header": "hi"}, headers=_AUTH)
     assert resp.status_code == 200
     assert resp.json()["ok"] is False
 
@@ -176,6 +180,11 @@ def test_post_schedule_too_many_files_rejected(http):
 def test_post_schedule_file_missing_path_rejected(http):
     DS._set_bot_loop(MagicMock())
     resp = http.post("/post-schedule", json={"files": [{"description": "no path"}]}, headers=_AUTH)
+    assert resp.status_code == 422
+
+
+def test_post_schedule_empty_files_and_no_header_rejected(http):
+    resp = http.post("/post-schedule", json={"files": []}, headers=_AUTH)
     assert resp.status_code == 422
 
 
@@ -223,8 +232,8 @@ def test_post_schedule_rate_limited_after_10_requests(http):
     DS._set_bot_loop(MagicMock())
     with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok):
         for _ in range(10):
-            assert http.post("/post-schedule", json={"files": []}, headers=_AUTH).status_code == 200
-        resp = http.post("/post-schedule", json={"files": []}, headers=_AUTH)
+            assert http.post("/post-schedule", json={"files": [], "header": "hi"}, headers=_AUTH).status_code == 200
+        resp = http.post("/post-schedule", json={"files": [], "header": "hi"}, headers=_AUTH)
     assert resp.status_code == 429
 
 
@@ -242,7 +251,7 @@ def test_notify_rate_limited_after_20_requests(http):
 # ─────────────────────────────────────────────────────
 
 @pytest.mark.parametrize("path,body", [
-    ("/post-schedule", {"files": []}),
+    ("/post-schedule", {"files": [], "header": "hi"}),
     ("/notify-session-expired", {}),
     ("/notify-failure", {}),
 ])

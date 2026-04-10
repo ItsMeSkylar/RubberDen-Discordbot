@@ -49,7 +49,14 @@
       "Bash(python3 -c \"import json; f=open\\('f:/Dropbox/Apps/Shared/pythonScript/config.json'\\); print\\(json.dumps\\(json.load\\(f\\), indent=2\\)\\)\")",
       "Bash(python -m pytest --tb=short)",
       "Bash(.venv/Scripts/python -m pytest tests/ -x -q)",
-      "Bash(python -m pytest tests/ -x -q)"
+      "Bash(python -m pytest tests/ -x -q)",
+      "Bash(python -c \"import discord; print\\(discord.__version__\\)\")",
+      "Read(//c/Users/Skylar/RubberDen/Backend/**)",
+      "Bash(cat \"C:/Users/Skylar/RubberDen/Backend/environments/\"*.example)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\Skylar\\RubberDen\\Backend\\src\\cron\\dispatchers",
+      "C:\\Users\\Skylar\\RubberDen\\Backend\\src\\cron"
     ]
   }
 }

@@ -79,6 +79,8 @@ class PostSchedulePayload(BaseModel):
     def validate_channel(self):
         if self.channel not in CHANNEL_IDS:
             raise ValueError(f"unknown channel '{self.channel}', valid: {sorted(CHANNEL_IDS)}")
+        if not self.files and not self.header:
+            raise ValueError("payload must have at least one file or a header")
         return self
 
 
