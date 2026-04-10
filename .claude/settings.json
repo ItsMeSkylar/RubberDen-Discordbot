@@ -59,7 +59,8 @@
     "additionalDirectories": [
       "C:\\Users\\Skylar\\RubberDen\\Backend\\src\\cron\\dispatchers",
       "C:\\Users\\Skylar\\RubberDen\\Backend\\src\\cron",
-      "C:\\Users\\Skylar\\RubberDen\\Backend\\src\\discord-bot"
+      "C:\\Users\\Skylar\\RubberDen\\Backend\\src\\discord-bot",
+      "C:\\Users\\Skylar\\RubberDen\\Backend\\src\\controller"
     ]
   }
 }
