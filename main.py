@@ -2,6 +2,7 @@ import hmac
 import json
 import asyncio
 import logging
+import math
 import os
 import shutil
 import signal
@@ -245,7 +246,7 @@ async def health():
 
 @app.get("/ready")
 async def ready():
-    if DiscordScripts.get_bot_loop() is None or not client.is_ready():
+    if not client.is_ready() or math.isnan(client.latency):
         raise HTTPException(status_code=503, detail="bot not ready")
     return {"ok": True}
 
@@ -267,10 +268,10 @@ async def postSchedule(request: Request, payload: PostSchedulePayload, _: None =
     except asyncio.TimeoutError:
         fut.cancel()
         log.error("postSchedule timed out")
-        return {"ok": False, "error": "internal error"}
+        return {"ok": False, "error": "timeout"}
     except Exception as e:
         log.error("postSchedule failed: %s", e, exc_info=True)
-        return {"ok": False, "error": "internal error"}
+        return {"ok": False, "error": str(e)}
 
     return {"ok": True}
 
@@ -292,10 +293,10 @@ async def notifySessionExpired(request: Request, payload: NotifySessionExpiredPa
     except asyncio.TimeoutError:
         fut.cancel()
         log.error("notifySessionExpired timed out")
-        return {"ok": False, "error": "internal error"}
+        return {"ok": False, "error": "timeout"}
     except Exception as e:
         log.error("notifySessionExpired failed: %s", e, exc_info=True)
-        return {"ok": False, "error": "internal error"}
+        return {"ok": False, "error": str(e)}
 
     return {"ok": True}
 
@@ -317,10 +318,10 @@ async def notifyFailure(request: Request, payload: NotifyFailurePayload, _: None
     except asyncio.TimeoutError:
         fut.cancel()
         log.error("notifyFailure timed out")
-        return {"ok": False, "error": "internal error"}
+        return {"ok": False, "error": "timeout"}
     except Exception as e:
         log.error("notifyFailure failed: %s", e, exc_info=True)
-        return {"ok": False, "error": "internal error"}
+        return {"ok": False, "error": str(e)}
 
     return {"ok": True}
 

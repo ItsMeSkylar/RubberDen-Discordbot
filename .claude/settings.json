@@ -45,7 +45,8 @@
       "Bash(find . -type f -name \"*.py\" ! -path \"./.venv/*\" ! -path \"./__pycache__/*\" ! -path \"*/.pytest_cache/*\" ! -path \"*/.idea/*\" -exec grep -l \"TODO\\\\|FIXME\\\\|HACK\\\\|XXX\" {} \\\\;)",
       "Bash(grep -r \"password\\\\|secret\\\\|key\\\\|token\" . --include=\"*.py\" ! -path \"./.venv/*\" ! -path \"./__pycache__/*\" ! -path \"*/.pytest_cache/*\" ! -path \"*/.idea/*\")",
       "Bash(wc -l /f/Dropbox/Apps/Shared/pythonScript/tests/*.py)",
-      "Bash(wc -l \"f:/Dropbox/Apps/Shared/pythonScript/main.py\" \"f:/Dropbox/Apps/Shared/pythonScript/scripts/DiscordScripts.py\" \"f:/Dropbox/Apps/Shared/pythonScript/tests/test_\"*.py)"
+      "Bash(wc -l \"f:/Dropbox/Apps/Shared/pythonScript/main.py\" \"f:/Dropbox/Apps/Shared/pythonScript/scripts/DiscordScripts.py\" \"f:/Dropbox/Apps/Shared/pythonScript/tests/test_\"*.py)",
+      "Bash(python3 -c \"import json; f=open\\('f:/Dropbox/Apps/Shared/pythonScript/config.json'\\); print\\(json.dumps\\(json.load\\(f\\), indent=2\\)\\)\")"
     ]
   }
 }

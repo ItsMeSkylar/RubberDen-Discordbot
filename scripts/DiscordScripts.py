@@ -40,6 +40,7 @@ _IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif"}
 
 _MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
 _TIMEOUT_DISCORD_SEND = 30  # seconds
+_HTTP_TIMEOUT = aiohttp.ClientTimeout(total=60, connect=10, sock_read=30)
 
 _http_session: aiohttp.ClientSession | None = None
 
@@ -58,7 +59,7 @@ def _set_bot_loop(loop: asyncio.AbstractEventLoop) -> None:
 async def _get_http_session() -> aiohttp.ClientSession:
     global _http_session
     if _http_session is None or _http_session.closed:
-        _http_session = aiohttp.ClientSession()
+        _http_session = aiohttp.ClientSession(timeout=_HTTP_TIMEOUT)
     return _http_session
 
 
@@ -222,51 +223,64 @@ async def post_payload(
             desc = item.get("description") or ""
 
             for attempt in range(3):
-                async with session.get(
-                    file_url,
-                    params={"path": file_path},
-                    headers=headers,
-                ) as r:
-                    if r.status != 200:
-                        text = await r.text()
-                        if attempt < 2 and r.status >= 500:
-                            log.warning(
-                                "backend returned %d for %s, retrying in %ds",
-                                r.status,
-                                file_path,
-                                2 ** attempt,
-                            )
-                            await asyncio.sleep(2 ** attempt)
-                            continue
-                        raise RuntimeError(
-                            f"backend file failed: {r.status} {text[:200]}"
-                        )
-
-                    content_length = r.headers.get("Content-Length")
-                    if content_length is not None:
-                        try:
-                            cl_int = int(content_length)
-                        except ValueError:
-                            log.warning(
-                                "malformed Content-Length header %r for %s, skipping pre-check",
-                                content_length,
-                                file_path,
-                            )
-                            cl_int = None
-                        if cl_int is not None and cl_int > _MAX_DOWNLOAD_BYTES:
+                try:
+                    async with session.get(
+                        file_url,
+                        params={"path": file_path},
+                        headers=headers,
+                    ) as r:
+                        if r.status != 200:
+                            text = await r.text()
+                            if attempt < 2 and r.status >= 500:
+                                log.warning(
+                                    "backend returned %d for %s, retrying in %ds",
+                                    r.status,
+                                    file_path,
+                                    2 ** attempt,
+                                )
+                                await asyncio.sleep(2 ** attempt)
+                                continue
                             raise RuntimeError(
-                                f"file too large: {content_length} bytes (max {_MAX_DOWNLOAD_BYTES})"
+                                f"backend file failed: {r.status} {text[:200]}"
                             )
 
-                    data = await r.read()
-                    if len(data) > _MAX_DOWNLOAD_BYTES:
-                        raise RuntimeError(
-                            f"file too large: {len(data)} bytes (max {_MAX_DOWNLOAD_BYTES})"
-                        )
+                        content_length = r.headers.get("Content-Length")
+                        if content_length is not None:
+                            try:
+                                cl_int = int(content_length)
+                            except ValueError:
+                                log.warning(
+                                    "malformed Content-Length header %r for %s, skipping pre-check",
+                                    content_length,
+                                    file_path,
+                                )
+                                cl_int = None
+                            if cl_int is not None and cl_int > _MAX_DOWNLOAD_BYTES:
+                                raise RuntimeError(
+                                    f"file too large: {content_length} bytes (max {_MAX_DOWNLOAD_BYTES})"
+                                )
 
-                    ct = (r.headers.get("Content-Type") or "").lower()
-                    video_link = r.headers.get("X-Video-Link")
-                    break
+                        data = await r.read()
+                        if len(data) > _MAX_DOWNLOAD_BYTES:
+                            raise RuntimeError(
+                                f"file too large: {len(data)} bytes (max {_MAX_DOWNLOAD_BYTES})"
+                            )
+
+                        ct = (r.headers.get("Content-Type") or "").lower()
+                        video_link = r.headers.get("X-Video-Link")
+                        break
+                except (aiohttp.ClientConnectionError, aiohttp.ServerDisconnectedError, asyncio.TimeoutError) as e:
+                    if attempt < 2:
+                        log.warning(
+                            "network error fetching %s (attempt %d): %s — retrying in %ds",
+                            file_path,
+                            attempt + 1,
+                            e,
+                            2 ** attempt,
+                        )
+                        await asyncio.sleep(2 ** attempt)
+                        continue
+                    raise RuntimeError(f"network error fetching {file_path} after 3 attempts: {e}") from e
 
             scrub_name = (filename.rsplit(".", 1)[0] + ".jpg") if video_link else filename
             data = await scrub_metadata_bytes(data, scrub_name)
