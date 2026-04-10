@@ -53,7 +53,7 @@ def _parse_ids(env_var: str) -> list[int]:
 
 
 config["whitelist"] = _parse_ids("WHITELIST_IDS")
-config["permitted-id-clear-all-messages"] = _parse_ids("PERMITTED_CLEAR_IDS")
+config["permitted-ids-clear-all-messages"] = _parse_ids("PERMITTED_CLEAR_IDS")
 CHANNEL_IDS: dict = config["channels"]
 
 _bad_channel_ids = {k: v for k, v in CHANNEL_IDS.items() if not isinstance(v, int) or v <= 0}

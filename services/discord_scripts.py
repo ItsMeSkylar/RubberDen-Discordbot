@@ -29,10 +29,12 @@ BOT_LOOP: asyncio.AbstractEventLoop | None = None
 _bot_loop_lock = threading.Lock()
 
 _http_thread: threading.Thread | None = None
+_http_thread_lock = threading.Lock()
 
 
 def get_http_thread() -> threading.Thread | None:
-    return _http_thread
+    with _http_thread_lock:
+        return _http_thread
 
 
 def get_bot_loop() -> asyncio.AbstractEventLoop | None:
@@ -87,11 +89,11 @@ async def _send_with_retry(channel, **kwargs):
             await asyncio.wait_for(channel.send(**kwargs), timeout=_TIMEOUT_DISCORD_SEND)
             _discord_send_total.labels(outcome="success").inc()
             return
-        except discord.HTTPException as e:
+        except (discord.HTTPException, asyncio.TimeoutError) as e:
             if attempt == 2:
                 _discord_send_total.labels(outcome="failure").inc()
                 raise
-            if e.status == 429:
+            if isinstance(e, discord.HTTPException) and e.status == 429:
                 retry_after = float(getattr(e, "retry_after", 2 ** attempt))
                 log.warning("rate limited by Discord, retrying in %.1fs", retry_after)
                 await asyncio.sleep(retry_after)
@@ -131,7 +133,6 @@ async def _download_file(
     if ".." in normalized or (len(file_path) >= 2 and file_path[1] == ":"):
         raise ValueError(f"Rejected unsafe file path: {file_path!r}")
     # Absolute paths are only allowed under the expected content root.
-    _ALLOWED_PREFIX = "/Apps/Shared/content/"
     if normalized.startswith("/") and not normalized.startswith(_ALLOWED_PREFIX):
         raise ValueError(f"Rejected unsafe file path: {file_path!r}")
 
@@ -200,6 +201,7 @@ async def _download_file(
 # ─────────────────────────────
 
 _MAX_MSG_FIELD = 1800  # leave headroom below Discord's 2000-char limit
+_ALLOWED_PREFIX = "/Apps/Shared/content/"
 
 
 async def post_payload(
@@ -273,7 +275,7 @@ async def post_payload(
     log.info("sent to #%s: %d file(s)", channel.name, len(downloaded))
 
 
-async def post_session_expired(payload: dict, client: discord.Client, channel_ids: dict):
+async def notify_session_expired(payload: dict, client: discord.Client, channel_ids: dict):
     channel_id = channel_ids["bots"]
     channel = client.get_channel(channel_id) or await client.fetch_channel(channel_id)
 
@@ -290,7 +292,7 @@ async def post_session_expired(payload: dict, client: discord.Client, channel_id
     )
 
 
-async def post_failure(payload: dict, client: discord.Client, channel_ids: dict):
+async def notify_failure(payload: dict, client: discord.Client, channel_ids: dict):
     channel_id = channel_ids["bots"]
     channel = client.get_channel(channel_id) or await client.fetch_channel(channel_id)
 
@@ -334,8 +336,10 @@ def setup(
                     log.error("HTTP server crashed", exc_info=True)
 
             global _http_thread
-            _http_thread = threading.Thread(target=_run_http_safe, daemon=False, name="http-server")
-            _http_thread.start()
+            t = threading.Thread(target=_run_http_safe, daemon=False, name="http-server")
+            with _http_thread_lock:
+                _http_thread = t
+            t.start()
 
         await client.change_presence(activity=discord.Game(name="Sqrrrks~"))
 
@@ -355,7 +359,7 @@ def setup(
         if interaction.user.id not in config["whitelist"]:
             return await interaction.response.send_message("Not authorized")
 
-        if channel.id not in config["permitted-id-clear-all-messages"]:
+        if channel.id not in config["permitted-ids-clear-all-messages"]:
             return await interaction.response.send_message(
                 f"{channel} is not permitted to clear messages"
             )

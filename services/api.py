@@ -180,7 +180,7 @@ async def post_schedule(request: Request, payload: PostSchedulePayload, _: None 
 @_limiter.limit("20/minute")
 async def notify_session_expired(request: Request, payload: NotifySessionExpiredPayload, _: None = Depends(_auth)):
     return await _dispatch(
-        discord_scripts.post_session_expired(payload.model_dump(), _client, CHANNEL_IDS),
+        discord_scripts.notify_session_expired(payload.model_dump(), _client, CHANNEL_IDS),
         TIMEOUT_NOTIFY,
         "notify_session_expired",
     )
@@ -190,7 +190,7 @@ async def notify_session_expired(request: Request, payload: NotifySessionExpired
 @_limiter.limit("20/minute")
 async def notify_failure(request: Request, payload: NotifyFailurePayload, _: None = Depends(_auth)):
     return await _dispatch(
-        discord_scripts.post_failure(payload.model_dump(), _client, CHANNEL_IDS),
+        discord_scripts.notify_failure(payload.model_dump(), _client, CHANNEL_IDS),
         TIMEOUT_NOTIFY,
         "notify_failure",
     )
