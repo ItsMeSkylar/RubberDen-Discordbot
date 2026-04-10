@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock
 
-from scripts.DiscordScripts import post_failure
+from services.DiscordScripts import post_failure
 
 CHANNEL_IDS = {"bots": 111}
 

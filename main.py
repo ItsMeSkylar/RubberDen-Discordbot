@@ -1,29 +1,16 @@
-import hmac
-import json
 import asyncio
+import json
 import logging
-import math
-import os
-import shutil
 import signal
 import sys
-import time
 
 import discord
 from discord.ext import commands
-from dotenv import load_dotenv
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
-from prometheus_client import Counter, Histogram, make_asgi_app, REGISTRY
-from prometheus_client.core import GaugeMetricFamily
-from pydantic import BaseModel, Field, model_validator
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
-from typing import Annotated
 import uvicorn
 
-from scripts import DiscordScripts
+from services import api
+from services.config import TOKEN_DISCORD, config
+from services import DiscordScripts
 
 # ─────────────────────────────
 # Logging (structured JSON)
@@ -49,89 +36,6 @@ logging.basicConfig(level=logging.INFO, handlers=[_handler])
 log = logging.getLogger(__name__)
 
 # ─────────────────────────────
-# Metrics
-# ─────────────────────────────
-
-_http_requests = Counter(
-    "jenniferbot_http_requests_total",
-    "Total HTTP requests",
-    ["endpoint", "status"],
-)
-_http_latency = Histogram(
-    "jenniferbot_http_request_duration_seconds",
-    "HTTP request duration in seconds",
-    ["endpoint"],
-)
-
-
-class _BotReadyCollector:
-    """Dynamically reports bot ready state so the gauge is always current."""
-
-    def collect(self):
-        g = GaugeMetricFamily("jenniferbot_bot_ready", "1 if Discord bot is ready")
-        g.add_metric([], 1.0 if _discord_client_ready() else 0.0)
-        yield g
-
-
-def _discord_client_ready() -> bool:
-    # Resolved after Discord client is created; avoids forward-reference issues.
-    return "client" in globals() and client.is_ready()
-
-
-REGISTRY.register(_BotReadyCollector())
-
-# ─────────────────────────────
-# Config / tokens
-# ─────────────────────────────
-
-_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
-
-APP_ENV = os.environ.get("APP_ENV", "dev")
-load_dotenv(os.path.join(_PROJECT_ROOT, f"env/.env.{APP_ENV}"))
-
-_missing = [v for v in ("BASE_URL", "INTERNAL_TOKEN", "DISCORD_TOKEN", "WHITELIST_IDS", "PERMITTED_CLEAR_IDS") if not os.environ.get(v)]
-if _missing:
-    raise SystemExit(f"Missing required env vars: {', '.join(_missing)}")
-
-if shutil.which("ffmpeg") is None:
-    raise SystemExit("ffmpeg not found in PATH. Install ffmpeg before running.")
-
-BASE_URL = os.environ["BASE_URL"]
-INTERNAL_TOKEN = os.environ["INTERNAL_TOKEN"]
-TOKEN_DISCORD = os.environ["DISCORD_TOKEN"]
-
-try:
-    with open(os.path.join(_PROJECT_ROOT, "config.json")) as f:
-        config = json.load(f)
-except FileNotFoundError:
-    raise SystemExit("config.json not found")
-except json.JSONDecodeError as e:
-    raise SystemExit(f"config.json is invalid JSON: {e}")
-
-def _parse_ids(env_var: str) -> list[int]:
-    try:
-        return [int(x.strip()) for x in os.environ[env_var].split(",") if x.strip()]
-    except ValueError as e:
-        raise SystemExit(f"Invalid integer in {env_var}: {e}")
-
-config["whitelist"] = _parse_ids("WHITELIST_IDS")
-config["permitted-id-clear-all-messages"] = _parse_ids("PERMITTED_CLEAR_IDS")
-CHANNEL_IDS: dict = config["channels"]
-
-_bad_channel_ids = {k: v for k, v in CHANNEL_IDS.items() if not isinstance(v, int)}
-if _bad_channel_ids:
-    raise SystemExit(f"config.json channel IDs must be integers, invalid: {_bad_channel_ids}")
-
-_REQUIRED_CHANNELS = {"bots"}
-_missing_channels = _REQUIRED_CHANNELS - set(CHANNEL_IDS.keys())
-if _missing_channels:
-    raise SystemExit(f"config.json missing required channel IDs: {', '.join(sorted(_missing_channels))}")
-
-# Timeout constants — override via env vars if needed
-_TIMEOUT_POST_SCHEDULE = int(os.environ.get("TIMEOUT_POST_SCHEDULE", "60"))
-_TIMEOUT_NOTIFY = int(os.environ.get("TIMEOUT_NOTIFY", "10"))
-
-# ─────────────────────────────
 # Discord bot
 # ─────────────────────────────
 
@@ -139,74 +43,25 @@ intents = discord.Intents.default()
 intents.message_content = True
 client = commands.Bot(command_prefix="!", intents=intents)
 
+api.set_client(client)
+
 # ─────────────────────────────
-# FastAPI app / request models
+# HTTP server
 # ─────────────────────────────
-
-
-class FileItem(BaseModel):
-    fileDir: str | None = None
-    filename: str | None = None
-    description: str = ""
-
-    @model_validator(mode="after")
-    def require_path(self):
-        if not self.fileDir and not self.filename:
-            raise ValueError("each file must have 'fileDir' or 'filename'")
-        return self
-
-
-class PostSchedulePayload(BaseModel):
-    channel: str = "bots"
-    header: str = ""
-    footer: str = ""
-    files: list[FileItem] = Field(default=[], max_length=10)
-
-
-class NotifySessionExpiredPayload(BaseModel):
-    site: str = "unknown"
-
-
-class NotifyFailurePayload(BaseModel):
-    error: str = "unknown error"
-    site: str = "unknown"
-    entry_id: str = "?"
-
-
-app = FastAPI()
-
-_limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = _limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-
-app.mount("/metrics", make_asgi_app())
-
-
-@app.middleware("http")
-async def _metrics_middleware(request: Request, call_next):
-    start = time.perf_counter()
-    response = await call_next(request)
-    duration = time.perf_counter() - start
-    path = request.url.path
-    _http_latency.labels(endpoint=path).observe(duration)
-    _http_requests.labels(endpoint=path, status=str(response.status_code)).inc()
-    return response
-
-
-def _auth(x_internal_token: Annotated[str | None, Header()] = None):
-    if not hmac.compare_digest(x_internal_token or "", INTERNAL_TOKEN):
-        raise HTTPException(status_code=401, detail="Unauthorized")
-
 
 _uvicorn_server: uvicorn.Server | None = None
 
 
 def start_http():
     global _uvicorn_server
-    cfg = uvicorn.Config(app, host="127.0.0.1", port=8000, log_level="info")
+    cfg = uvicorn.Config(api.app, host="127.0.0.1", port=8000, log_level="info")
     _uvicorn_server = uvicorn.Server(cfg)
     _uvicorn_server.run()
 
+
+# ─────────────────────────────
+# Shutdown
+# ─────────────────────────────
 
 _shutdown_called = False
 
@@ -227,107 +82,14 @@ def _shutdown(_signum=None, _frame=None):
 signal.signal(signal.SIGTERM, _shutdown)
 signal.signal(signal.SIGINT, _shutdown)
 
-
 # ─────────────────────────────
-# Register Discord handlers
+# Wire up Discord handlers
 # ─────────────────────────────
 
 DiscordScripts.setup(client, config, start_http)
 
 # ─────────────────────────────
-# HTTP endpoints
-# ─────────────────────────────
-
-
-@app.get("/health")
-async def health():
-    return {"ok": True}
-
-
-@app.get("/ready")
-async def ready():
-    if not client.is_ready() or math.isnan(client.latency):
-        raise HTTPException(status_code=503, detail="bot not ready")
-    return {"ok": True}
-
-
-@app.post("/post-schedule")
-@_limiter.limit("10/minute")
-async def postSchedule(request: Request, payload: PostSchedulePayload, _: None = Depends(_auth)):
-    loop = DiscordScripts.get_bot_loop()
-    if loop is None:
-        return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
-
-    fut = asyncio.run_coroutine_threadsafe(
-        DiscordScripts.post_payload(payload.model_dump(), client, CHANNEL_IDS, BASE_URL, INTERNAL_TOKEN),
-        loop,
-    )
-
-    try:
-        await asyncio.wait_for(asyncio.wrap_future(fut), timeout=_TIMEOUT_POST_SCHEDULE)
-    except asyncio.TimeoutError:
-        fut.cancel()
-        log.error("postSchedule timed out")
-        return {"ok": False, "error": "timeout"}
-    except Exception as e:
-        log.error("postSchedule failed: %s", e, exc_info=True)
-        return {"ok": False, "error": str(e)}
-
-    return {"ok": True}
-
-
-@app.post("/notify-session-expired")
-@_limiter.limit("20/minute")
-async def notifySessionExpired(request: Request, payload: NotifySessionExpiredPayload, _: None = Depends(_auth)):
-    loop = DiscordScripts.get_bot_loop()
-    if loop is None:
-        return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
-
-    fut = asyncio.run_coroutine_threadsafe(
-        DiscordScripts.post_session_expired(payload.model_dump(), client, CHANNEL_IDS),
-        loop,
-    )
-
-    try:
-        await asyncio.wait_for(asyncio.wrap_future(fut), timeout=_TIMEOUT_NOTIFY)
-    except asyncio.TimeoutError:
-        fut.cancel()
-        log.error("notifySessionExpired timed out")
-        return {"ok": False, "error": "timeout"}
-    except Exception as e:
-        log.error("notifySessionExpired failed: %s", e, exc_info=True)
-        return {"ok": False, "error": str(e)}
-
-    return {"ok": True}
-
-
-@app.post("/notify-failure")
-@_limiter.limit("20/minute")
-async def notifyFailure(request: Request, payload: NotifyFailurePayload, _: None = Depends(_auth)):
-    loop = DiscordScripts.get_bot_loop()
-    if loop is None:
-        return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
-
-    fut = asyncio.run_coroutine_threadsafe(
-        DiscordScripts.post_failure(payload.model_dump(), client, CHANNEL_IDS),
-        loop,
-    )
-
-    try:
-        await asyncio.wait_for(asyncio.wrap_future(fut), timeout=_TIMEOUT_NOTIFY)
-    except asyncio.TimeoutError:
-        fut.cancel()
-        log.error("notifyFailure timed out")
-        return {"ok": False, "error": "timeout"}
-    except Exception as e:
-        log.error("notifyFailure failed: %s", e, exc_info=True)
-        return {"ok": False, "error": str(e)}
-
-    return {"ok": True}
-
-
-# ─────────────────────────────
-# Start bot
+# Entry point
 # ─────────────────────────────
 
 if __name__ == "__main__":

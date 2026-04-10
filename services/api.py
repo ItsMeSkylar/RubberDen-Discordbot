@@ -1,0 +1,207 @@
+import asyncio
+import hmac
+import logging
+import math
+import time
+from typing import Annotated
+
+import discord
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi.responses import JSONResponse
+from prometheus_client import Counter, Histogram, make_asgi_app, REGISTRY
+from prometheus_client.core import GaugeMetricFamily
+from pydantic import BaseModel, Field, model_validator
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
+
+from .config import BASE_URL, CHANNEL_IDS, INTERNAL_TOKEN, TIMEOUT_POST_SCHEDULE, TIMEOUT_NOTIFY
+from . import DiscordScripts
+
+log = logging.getLogger(__name__)
+
+# ─────────────────────────────
+# Metrics
+# ─────────────────────────────
+
+_http_requests = Counter(
+    "jenniferbot_http_requests_total",
+    "Total HTTP requests",
+    ["endpoint", "status"],
+)
+_http_latency = Histogram(
+    "jenniferbot_http_request_duration_seconds",
+    "HTTP request duration in seconds",
+    ["endpoint"],
+)
+
+_client: discord.Client | None = None
+
+
+def set_client(c: discord.Client) -> None:
+    global _client
+    _client = c
+
+
+class _BotReadyCollector:
+    def collect(self):
+        g = GaugeMetricFamily("jenniferbot_bot_ready", "1 if Discord bot is ready")
+        g.add_metric([], 1.0 if (_client is not None and _client.is_ready()) else 0.0)
+        yield g
+
+
+REGISTRY.register(_BotReadyCollector())
+
+# ─────────────────────────────
+# Request models
+# ─────────────────────────────
+
+
+class FileItem(BaseModel):
+    fileDir: str | None = None
+    filename: str | None = None
+    description: str = ""
+
+    @model_validator(mode="after")
+    def require_path(self):
+        if not self.fileDir and not self.filename:
+            raise ValueError("each file must have 'fileDir' or 'filename'")
+        return self
+
+
+class PostSchedulePayload(BaseModel):
+    channel: str = "bots"
+    header: str = ""
+    footer: str = ""
+    files: list[FileItem] = Field(default=[], max_length=10)
+
+
+class NotifySessionExpiredPayload(BaseModel):
+    site: str = "unknown"
+
+
+class NotifyFailurePayload(BaseModel):
+    error: str = "unknown error"
+    site: str = "unknown"
+    entry_id: str = "?"
+
+
+# ─────────────────────────────
+# App
+# ─────────────────────────────
+
+app = FastAPI()
+
+_limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = _limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+app.mount("/metrics", make_asgi_app())
+
+
+@app.middleware("http")
+async def _metrics_middleware(request: Request, call_next):
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration = time.perf_counter() - start
+    path = request.url.path
+    _http_latency.labels(endpoint=path).observe(duration)
+    _http_requests.labels(endpoint=path, status=str(response.status_code)).inc()
+    return response
+
+
+def _auth(x_internal_token: Annotated[str | None, Header()] = None):
+    if not hmac.compare_digest(x_internal_token or "", INTERNAL_TOKEN):
+        raise HTTPException(status_code=401, detail="Unauthorized")
+
+
+# ─────────────────────────────
+# Endpoints
+# ─────────────────────────────
+
+
+@app.get("/health")
+async def health():
+    return {"ok": True}
+
+
+@app.get("/ready")
+async def ready():
+    if _client is None or not _client.is_ready() or math.isnan(_client.latency):
+        raise HTTPException(status_code=503, detail="bot not ready")
+    return {"ok": True}
+
+
+@app.post("/post-schedule")
+@_limiter.limit("10/minute")
+async def postSchedule(request: Request, payload: PostSchedulePayload, _: None = Depends(_auth)):
+    loop = DiscordScripts.get_bot_loop()
+    if loop is None:
+        return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
+
+    fut = asyncio.run_coroutine_threadsafe(
+        DiscordScripts.post_payload(payload.model_dump(), _client, CHANNEL_IDS, BASE_URL, INTERNAL_TOKEN),
+        loop,
+    )
+
+    try:
+        await asyncio.wait_for(asyncio.wrap_future(fut), timeout=TIMEOUT_POST_SCHEDULE)
+    except asyncio.TimeoutError:
+        fut.cancel()
+        log.error("postSchedule timed out")
+        return {"ok": False, "error": "timeout"}
+    except Exception as e:
+        log.error("postSchedule failed: %s", e, exc_info=True)
+        return {"ok": False, "error": str(e)}
+
+    return {"ok": True}
+
+
+@app.post("/notify-session-expired")
+@_limiter.limit("20/minute")
+async def notifySessionExpired(request: Request, payload: NotifySessionExpiredPayload, _: None = Depends(_auth)):
+    loop = DiscordScripts.get_bot_loop()
+    if loop is None:
+        return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
+
+    fut = asyncio.run_coroutine_threadsafe(
+        DiscordScripts.post_session_expired(payload.model_dump(), _client, CHANNEL_IDS),
+        loop,
+    )
+
+    try:
+        await asyncio.wait_for(asyncio.wrap_future(fut), timeout=TIMEOUT_NOTIFY)
+    except asyncio.TimeoutError:
+        fut.cancel()
+        log.error("notifySessionExpired timed out")
+        return {"ok": False, "error": "timeout"}
+    except Exception as e:
+        log.error("notifySessionExpired failed: %s", e, exc_info=True)
+        return {"ok": False, "error": str(e)}
+
+    return {"ok": True}
+
+
+@app.post("/notify-failure")
+@_limiter.limit("20/minute")
+async def notifyFailure(request: Request, payload: NotifyFailurePayload, _: None = Depends(_auth)):
+    loop = DiscordScripts.get_bot_loop()
+    if loop is None:
+        return JSONResponse(status_code=503, content={"ok": False, "error": "bot not ready yet"})
+
+    fut = asyncio.run_coroutine_threadsafe(
+        DiscordScripts.post_failure(payload.model_dump(), _client, CHANNEL_IDS),
+        loop,
+    )
+
+    try:
+        await asyncio.wait_for(asyncio.wrap_future(fut), timeout=TIMEOUT_NOTIFY)
+    except asyncio.TimeoutError:
+        fut.cancel()
+        log.error("notifyFailure timed out")
+        return {"ok": False, "error": "timeout"}
+    except Exception as e:
+        log.error("notifyFailure failed: %s", e, exc_info=True)
+        return {"ok": False, "error": str(e)}
+
+    return {"ok": True}

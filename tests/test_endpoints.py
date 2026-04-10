@@ -1,8 +1,8 @@
-"""Integration tests for the FastAPI HTTP endpoints in main.py.
+"""Integration tests for the FastAPI HTTP endpoints.
 
 conftest.py sets the required env vars before this module is imported.
 The shutil.which patch below prevents the ffmpeg SystemExit from firing
-when main.py is first imported.
+when config.py is first imported.
 """
 
 import asyncio
@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from fastapi.testclient import TestClient
 
-# Patch the ffmpeg startup check so importing main.py doesn't raise SystemExit
+# Patch the ffmpeg startup check so importing config.py doesn't raise SystemExit
 # in environments that don't have ffmpeg in PATH.
 if "main" not in sys.modules:
     with patch("shutil.which", return_value="/usr/bin/ffmpeg"):
@@ -21,7 +21,8 @@ if "main" not in sys.modules:
 else:
     import main  # already imported (e.g. running full test suite)
 
-import scripts.DiscordScripts as DS
+from services import api
+import services.DiscordScripts as DS
 
 _TOKEN = "test-secret"
 _AUTH = {"X-Internal-Token": _TOKEN}
@@ -71,13 +72,13 @@ def isolate_bot_state():
 @pytest.fixture(autouse=True)
 def reset_limiter():
     """Clear rate-limit counters before each test so tests don't interfere."""
-    main._limiter.reset()
+    api._limiter.reset()
     yield
 
 
 @pytest.fixture()
 def http():
-    with TestClient(main.app, raise_server_exceptions=False) as c:
+    with TestClient(api.app, raise_server_exceptions=False) as c:
         yield c
 
 
@@ -195,8 +196,9 @@ def test_ready_returns_503_when_bot_not_ready(http):
 
 
 def test_ready_returns_200_when_bot_ready(http):
-    DS._set_bot_loop(MagicMock())
-    resp = http.get("/ready")
+    with patch.object(main.client, "is_ready", return_value=True), \
+         patch.object(type(main.client), "latency", new_callable=lambda: property(lambda self: 0.1)):
+        resp = http.get("/ready")
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
 
