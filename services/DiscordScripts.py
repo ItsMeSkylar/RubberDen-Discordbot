@@ -270,6 +270,7 @@ async def post_payload(
         embeds=embeds,
         files=attachments,
     )
+    log.info("sent to #%s: %d file(s)", channel.name, len(downloaded))
 
 
 async def post_session_expired(payload: dict, client: discord.Client, channel_ids: dict):

@@ -7,7 +7,7 @@ from typing import Annotated
 
 import discord
 from fastapi import Depends, FastAPI, Header, HTTPException, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 from prometheus_client import Counter, Histogram, make_asgi_app, REGISTRY
 from prometheus_client.core import GaugeMetricFamily
 from pydantic import BaseModel, Field, model_validator
@@ -115,6 +115,12 @@ async def _metrics_middleware(request: Request, call_next):
     path = request.url.path
     _http_latency.labels(endpoint=path).observe(duration)
     _http_requests.labels(endpoint=path, status=str(response.status_code)).inc()
+    if response.status_code == 422:
+        body = b""
+        async for chunk in response.body_iterator:
+            body += chunk
+        log.warning("422 validation error on %s: %s", path, body.decode(errors="replace"))
+        return Response(content=body, status_code=422, media_type=response.media_type)
     return response
 
 
