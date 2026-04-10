@@ -6,7 +6,7 @@ import time
 from typing import Annotated
 
 import discord
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.responses import Response
 from prometheus_client import Counter, Histogram, make_asgi_app, REGISTRY
 from prometheus_client.core import GaugeMetricFamily
@@ -193,4 +193,20 @@ async def notify_failure(request: Request, payload: NotifyFailurePayload, _: Non
         discord_scripts.notify_failure(payload.model_dump(), _client, CHANNEL_IDS),
         TIMEOUT_NOTIFY,
         "notify_failure",
+    )
+
+
+@app.post("/send-debug-image")
+@_limiter.limit("5/minute")
+async def send_debug_image(
+    request: Request,
+    file: UploadFile = File(...),
+    caption: str = Form(default=""),
+    _: None = Depends(_auth),
+):
+    data = await file.read()
+    return await _dispatch(
+        discord_scripts.send_debug_image(data, file.filename or "debug.png", caption, _client, CHANNEL_IDS),
+        TIMEOUT_NOTIFY,
+        "send_debug_image",
     )

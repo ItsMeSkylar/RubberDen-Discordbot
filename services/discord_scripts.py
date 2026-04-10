@@ -306,6 +306,13 @@ async def notify_failure(payload: dict, client: discord.Client, channel_ids: dic
     )
 
 
+async def send_debug_image(image_bytes: bytes, filename: str, caption: str, client: discord.Client, channel_ids: dict):
+    channel_id = channel_ids["bots"]
+    channel = client.get_channel(channel_id) or await client.fetch_channel(channel_id)
+    f = discord.File(fp=io.BytesIO(image_bytes), filename=filename)
+    await _send_with_retry(channel, content=caption[:_MAX_MSG_FIELD] or None, files=[f])
+
+
 # ─────────────────────────────
 # Discord event handlers
 # ─────────────────────────────
