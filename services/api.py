@@ -94,6 +94,15 @@ class NotifyFailurePayload(BaseModel):
     entry_id: str = Field(default="?", max_length=100)
 
 
+class NotifyPendingPayload(BaseModel):
+    site: str = Field(default="unknown", max_length=100)
+    title: str = Field(default="", max_length=500)
+    publish_url: str = Field(max_length=2000)
+    reminder: bool = False
+    failed: bool = False
+    error: str = Field(default="", max_length=1800)
+
+
 # ─────────────────────────────
 # App
 # ─────────────────────────────
@@ -193,6 +202,16 @@ async def notify_failure(request: Request, payload: NotifyFailurePayload, _: Non
         discord_scripts.notify_failure(payload.model_dump(), _client, CHANNEL_IDS),
         TIMEOUT_NOTIFY,
         "notify_failure",
+    )
+
+
+@app.post("/notify-pending")
+@_limiter.limit("20/minute")
+async def notify_pending(request: Request, payload: NotifyPendingPayload, _: None = Depends(_auth)):
+    return await _dispatch(
+        discord_scripts.notify_pending(payload.model_dump(), _client, CHANNEL_IDS),
+        TIMEOUT_NOTIFY,
+        "notify_pending",
     )
 
 

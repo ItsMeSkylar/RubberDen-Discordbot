@@ -85,13 +85,13 @@ def http():
 # Auth — shared across all three endpoints
 # ─────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("path", ["/post-schedule", "/notify-session-expired", "/notify-failure"])
+@pytest.mark.parametrize("path", ["/post-schedule", "/notify-session-expired", "/notify-failure", "/notify-pending"])
 def test_missing_token_returns_401(http, path):
     resp = http.post(path, json={})
     assert resp.status_code == 401
 
 
-@pytest.mark.parametrize("path", ["/post-schedule", "/notify-session-expired", "/notify-failure"])
+@pytest.mark.parametrize("path", ["/post-schedule", "/notify-session-expired", "/notify-failure", "/notify-pending"])
 def test_wrong_token_returns_401(http, path):
     resp = http.post(path, json={}, headers={"X-Internal-Token": "wrong"})
     assert resp.status_code == 401
@@ -105,6 +105,7 @@ def test_wrong_token_returns_401(http, path):
     ("/post-schedule", {"header": "hi"}),
     ("/notify-session-expired", {}),
     ("/notify-failure", {}),
+    ("/notify-pending", {"publish_url": "https://rubberden.com/publish?id=abc"}),
 ])
 def test_bot_not_ready_returns_503(http, path, body):
     DS._set_bot_loop(None)
@@ -139,6 +140,42 @@ def test_notify_failure_success(http):
         resp = http.post(
             "/notify-failure",
             json={"error": "oops", "site": "x", "entry_id": "1"},
+            headers=_AUTH,
+        )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_notify_pending_success(http):
+    DS._set_bot_loop(MagicMock())
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok()):
+        resp = http.post(
+            "/notify-pending",
+            json={"site": "patreon", "title": "My Post", "publish_url": "https://rubberden.com/publish?id=abc"},
+            headers=_AUTH,
+        )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_notify_pending_reminder_success(http):
+    DS._set_bot_loop(MagicMock())
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok()):
+        resp = http.post(
+            "/notify-pending",
+            json={"site": "twitter", "title": "My Tweet", "publish_url": "https://rubberden.com/publish?id=xyz", "reminder": True},
+            headers=_AUTH,
+        )
+    assert resp.status_code == 200
+    assert resp.json() == {"ok": True}
+
+
+def test_notify_pending_failure_alert_success(http):
+    DS._set_bot_loop(MagicMock())
+    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok()):
+        resp = http.post(
+            "/notify-pending",
+            json={"site": "patreon", "title": "My Post", "publish_url": "https://rubberden.com/publish?id=abc", "failed": True, "error": "Post button not found"},
             headers=_AUTH,
         )
     assert resp.status_code == 200
@@ -253,6 +290,7 @@ def test_notify_rate_limited_after_20_requests(http):
     ("/post-schedule", {"files": [], "header": "hi"}),
     ("/notify-session-expired", {}),
     ("/notify-failure", {}),
+    ("/notify-pending", {"publish_url": "https://rubberden.com/publish?id=abc"}),
 ])
 def test_endpoint_timeout_returns_ok_false(http, path, body):
     DS._set_bot_loop(MagicMock())

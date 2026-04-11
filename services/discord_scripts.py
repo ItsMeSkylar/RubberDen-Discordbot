@@ -306,6 +306,39 @@ async def notify_failure(payload: dict, client: discord.Client, channel_ids: dic
     )
 
 
+async def notify_pending(payload: dict, client: discord.Client, channel_ids: dict):
+    channel_id = channel_ids["bots"]
+    channel = client.get_channel(channel_id) or await client.fetch_channel(channel_id)
+
+    site = (payload.get("site") or "unknown")[:100]
+    title = (payload.get("title") or "")[:500]
+    publish_url = (payload.get("publish_url") or "")[:2000]
+    reminder = payload.get("reminder", False)
+    failed = payload.get("failed", False)
+    error = (payload.get("error") or "unknown error")[:_MAX_MSG_FIELD]
+    platform = site.capitalize()
+    title_line = f"\n*{title}*" if title else ""
+
+    if failed:
+        msg = (
+            f"❌ **{platform} post failed**{title_line}\n"
+            f"```{error}```\n"
+            f"[Retry](<{publish_url}>)"
+        )
+    elif reminder:
+        msg = (
+            f"⏰ **Reminder: {platform} post still pending**{title_line}\n"
+            f"[Publish now](<{publish_url}>)"
+        )
+    else:
+        msg = (
+            f"📋 **{platform} post ready**{title_line}\n"
+            f"[Publish now](<{publish_url}>)"
+        )
+
+    await _send_with_retry(channel, content=msg)
+
+
 async def send_debug_image(image_bytes: bytes, filename: str, caption: str, client: discord.Client, channel_ids: dict):
     channel_id = channel_ids["bots"]
     channel = client.get_channel(channel_id) or await client.fetch_channel(channel_id)
