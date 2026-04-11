@@ -7,7 +7,9 @@
       "Bash(grep -n \"test.*post.*schedule\\\\|test.*notify\\\\|test.*auth\\\\|test.*endpoint\\\\|test.*http\" /f/Dropbox/Apps/Shared/pythonScript/tests/*.py)",
       "Bash(python -m pip show httpx starlette)",
       "Bash(python -m pip install \"httpx>=0.23.0\")",
-      "Read(//c/Users/Skylar/RubberDen/**)"
+      "Read(//c/Users/Skylar/RubberDen/**)",
+      "Bash(wc -l f:\\\\Dropbox\\\\Apps\\\\Shared\\\\pythonScript/services/*.py f:\\\\Dropbox\\\\Apps\\\\Shared\\\\pythonScript/main.py)",
+      "Bash(find \"f:\\\\Dropbox\\\\Apps\\\\Shared\\\\pythonScript\" -name \"*.py\" ! -path \"*/.venv/*\" -exec wc -l {} +)"
     ]
   }
 }

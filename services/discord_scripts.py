@@ -203,6 +203,16 @@ async def _download_file(
 
 _MAX_MSG_FIELD = 1800  # leave headroom below Discord's 2000-char limit
 _ALLOWED_PREFIX = "/Apps/Shared/content/"
+_VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+def _is_image(name: str, ct: str) -> bool:
+    return ct.startswith("image/") or name.lower().endswith(tuple(_IMAGE_EXTENSIONS))
+
+
+def _thumb_name_for_video(video_filename: str) -> str:
+    return video_filename.rsplit(".", 1)[0] + ".jpg"
 
 
 async def post_payload(
@@ -238,31 +248,25 @@ async def post_payload(
             log.error("FAILED ITEM: %s", item, exc_info=True)
             raise
 
-    def is_image(name: str, ct: str) -> bool:
-        return ct.startswith("image/") or name.lower().endswith((".png", ".jpg", ".jpeg", ".gif", ".webp"))
-
-    def thumb_name_for_video(video_filename: str) -> str:
-        return video_filename.rsplit(".", 1)[0] + ".jpg"
-
     embeds = []
     attachments = []
 
     for filename, data, desc, ct, video_link, file_path in downloaded:
-        is_video = file_path.lower().endswith((".mp4", ".mov", ".m4v", ".webm")) or bool(video_link)
+        is_video = file_path.lower().endswith(tuple(_VIDEO_EXTENSIONS)) or bool(video_link)
 
         embed = discord.Embed(description=desc or " ", colour=0x9900FF)
         if footer_text:
             embed.set_footer(text=footer_text)
 
         if is_video:
-            thumb_name = thumb_name_for_video(filename)
+            thumb_name = _thumb_name_for_video(filename)
             attachments.append(discord.File(fp=io.BytesIO(data), filename=thumb_name))
             embed.set_image(url=f"attachment://{thumb_name}")
             if video_link:
                 embed.add_field(name="Link to video:", value=video_link, inline=False)
         else:
             attachments.append(discord.File(fp=io.BytesIO(data), filename=filename))
-            if is_image(filename, ct):
+            if _is_image(filename, ct):
                 embed.set_image(url=f"attachment://{filename}")
 
         embeds.append(embed)
