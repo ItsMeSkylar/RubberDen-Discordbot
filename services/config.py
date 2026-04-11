@@ -54,6 +54,12 @@ def _parse_ids(env_var: str) -> list[int]:
 
 config["whitelist"] = _parse_ids("WHITELIST_IDS")
 config["permitted-ids-clear-all-messages"] = _parse_ids("PERMITTED_CLEAR_IDS")
+
+NOTIFY_PING_IDS: list[int] = (
+    [int(x.strip()) for x in os.environ["NOTIFY_PING_IDS"].split(",") if x.strip()]
+    if os.environ.get("NOTIFY_PING_IDS")
+    else []
+)
 CHANNEL_IDS: dict = config["channels"]
 
 _bad_channel_ids = {k: v for k, v in CHANNEL_IDS.items() if not isinstance(v, int) or v <= 0}

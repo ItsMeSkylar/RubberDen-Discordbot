@@ -10,6 +10,7 @@ import aiohttp
 from prometheus_client import Counter
 
 from .scrubber import scrub_metadata_bytes
+from .config import NOTIFY_PING_IDS
 
 _discord_send_total = Counter(
     "jenniferbot_discord_send_total",
@@ -331,8 +332,10 @@ async def notify_pending(payload: dict, client: discord.Client, channel_ids: dic
             f"[Publish now](<{publish_url}>)"
         )
     else:
+        ping = " ".join(f"<@{uid}>" for uid in NOTIFY_PING_IDS)
+        ping_prefix = f"{ping} " if ping else ""
         msg = (
-            f"📋 **{platform} post ready**{title_line}\n"
+            f"{ping_prefix}📋 **{platform} post ready**{title_line}\n"
             f"[Publish now](<{publish_url}>)"
         )
 
