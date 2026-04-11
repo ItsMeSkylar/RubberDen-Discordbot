@@ -6,7 +6,8 @@
       "Bash(grep -c \"async def test\\\\|def test\" /f/Dropbox/Apps/Shared/pythonScript/tests/*.py)",
       "Bash(grep -n \"test.*post.*schedule\\\\|test.*notify\\\\|test.*auth\\\\|test.*endpoint\\\\|test.*http\" /f/Dropbox/Apps/Shared/pythonScript/tests/*.py)",
       "Bash(python -m pip show httpx starlette)",
-      "Bash(python -m pip install \"httpx>=0.23.0\")"
+      "Bash(python -m pip install \"httpx>=0.23.0\")",
+      "Read(//c/Users/Skylar/RubberDen/**)"
     ]
   }
 }

@@ -307,6 +307,35 @@ async def notify_failure(payload: dict, client: discord.Client, channel_ids: dic
     )
 
 
+_PLATFORM_ICONS = {
+    "twitter": "🐦",
+    "patreon": "🎨",
+    "bluesky": "☁️",
+}
+
+_PENDING_VIEW_TIMEOUT = 7 * 24 * 3600  # 7 days
+
+
+class _PostNotifyView(discord.ui.View):
+    """Buttons attached to a pending-post notification message."""
+
+    def __init__(self, publish_url: str, button_label: str = "Publish now"):
+        super().__init__(timeout=_PENDING_VIEW_TIMEOUT)
+        self.add_item(
+            discord.ui.Button(
+                label=button_label,
+                style=discord.ButtonStyle.link,
+                url=publish_url,
+                emoji="🚀",
+                row=0,
+            )
+        )
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, emoji="🗑️", row=0)
+    async def delete_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.message.delete()
+
+
 async def notify_pending(payload: dict, client: discord.Client, channel_ids: dict):
     channel_id = channel_ids["bots"]
     channel = client.get_channel(channel_id) or await client.fetch_channel(channel_id)
@@ -317,29 +346,43 @@ async def notify_pending(payload: dict, client: discord.Client, channel_ids: dic
     reminder = payload.get("reminder", False)
     failed = payload.get("failed", False)
     error = (payload.get("error") or "unknown error")[:_MAX_MSG_FIELD]
+
     platform = site.capitalize()
-    title_line = f"\n*{title}*" if title else ""
+    icon = _PLATFORM_ICONS.get(site.lower(), "📋")
 
     if failed:
-        msg = (
-            f"❌ **{platform} post failed**{title_line}\n"
-            f"```{error}```\n"
-            f"[Retry](<{publish_url}>)"
+        embed = discord.Embed(
+            title=f"❌  {platform} post failed",
+            color=0xE53935,
         )
+        if title:
+            embed.add_field(name="Post", value=title, inline=False)
+        embed.add_field(name="Error", value=f"```{error}```", inline=False)
+        view = _PostNotifyView(publish_url, button_label="Retry")
+        ping_content = None
     elif reminder:
-        msg = (
-            f"⏰ **Reminder: {platform} post still pending**{title_line}\n"
-            f"[Publish now](<{publish_url}>)"
+        embed = discord.Embed(
+            title=f"⏰  Reminder: {platform} post still pending",
+            color=0xFB8C00,
         )
+        if title:
+            embed.add_field(name="Post", value=title, inline=False)
+        view = _PostNotifyView(publish_url)
+        ping_content = None
     else:
-        ping = " ".join(f"<@{uid}>" for uid in NOTIFY_PING_IDS)
-        ping_prefix = f"{ping} " if ping else ""
-        msg = (
-            f"{ping_prefix}📋 **{platform} post ready**{title_line}\n"
-            f"[Publish now](<{publish_url}>)"
+        embed = discord.Embed(
+            title=f"{icon}  {platform} post ready",
+            color=0x7B2FBE,
         )
+        if title:
+            embed.add_field(name="Post", value=title, inline=False)
+        embed.add_field(name="Platform", value=platform, inline=True)
+        embed.set_footer(text="Click Publish now to send it live")
+        view = _PostNotifyView(publish_url)
+        ping = " ".join(f"<@{uid}>" for uid in NOTIFY_PING_IDS)
+        ping_content = ping or None
 
-    await _send_with_retry(channel, content=msg)
+    await _send_with_retry(channel, content=ping_content, embed=embed, view=view)
 
 
 async def send_debug_image(image_bytes: bytes, filename: str, caption: str, client: discord.Client, channel_ids: dict):
