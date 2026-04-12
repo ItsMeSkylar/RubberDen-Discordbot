@@ -304,11 +304,16 @@ async def notify_failure(payload: dict, client: discord.Client, channel_ids: dic
     error = (payload.get("error") or "unknown error")[:_MAX_MSG_FIELD]
     site = (payload.get("site") or "unknown")[:100]
     entry_id = (payload.get("entry_id") or "?")[:100]
+    title = (payload.get("title") or "")[:500]
 
-    await _send_with_retry(
-        channel,
-        content=f"❌ **Cron job failed**\nSite: `{site}` | Entry: `{entry_id}`\n```{error}```",
-    )
+    embed = discord.Embed(title="❌  Cron job failed", color=0xFF0000)
+    embed.add_field(name="Site", value=f"`{site}`", inline=True)
+    embed.add_field(name="Entry", value=f"`{entry_id}`", inline=True)
+    if title:
+        embed.add_field(name="Post", value=title, inline=False)
+    embed.add_field(name="Error", value=f"```{error}```", inline=False)
+
+    await _send_with_retry(channel, embed=embed)
 
 
 _PLATFORM_ICONS = {
@@ -343,6 +348,7 @@ class _PostNotifyView(discord.ui.View):
 
     @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, emoji="🗑️", row=0)
     async def delete_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
         await interaction.message.delete()
 
 

@@ -92,6 +92,7 @@ class NotifyFailurePayload(BaseModel):
     error: str = Field(default="unknown error", max_length=1800)
     site: str = Field(default="unknown", max_length=100)
     entry_id: str = Field(default="?", max_length=100)
+    title: str = Field(default="", max_length=500)
 
 
 class NotifyPendingPayload(BaseModel):
