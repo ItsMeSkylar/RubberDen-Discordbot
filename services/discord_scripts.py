@@ -338,16 +338,13 @@ _PLATFORM_COLORS = {
     "bluesky": 0x0085FF,
 }
 
-_PENDING_VIEW_TIMEOUT = 7 * 24 * 3600  # 7 days
-
-
 class _DeleteView(discord.ui.View):
-    """A view with only a Delete button."""
+    """A view with only a Delete button. Uses timeout=None for persistence across restarts."""
 
     def __init__(self):
-        super().__init__(timeout=_PENDING_VIEW_TIMEOUT)
+        super().__init__(timeout=None)
 
-    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, emoji="🗑️", row=0)
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, emoji="🗑️", row=0, custom_id="bot:delete")
     async def delete_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
         await interaction.response.defer()
         await interaction.message.delete()
@@ -387,7 +384,7 @@ async def notify_pending(payload: dict, client: discord.Client, channel_ids: dic
     if failed:
         embed = discord.Embed(
             title=f"❌  {platform} post failed",
-            color=color,
+            color=0xFF0000,
         )
         if title:
             embed.add_field(name="Post", value=title, inline=False)
@@ -439,6 +436,8 @@ def setup(
 
     _http_started = False
     _synced = False
+
+    client.add_view(_DeleteView())
 
     @client.event
     async def on_ready():
