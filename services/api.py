@@ -93,6 +93,7 @@ class NotifyFailurePayload(BaseModel):
     site: str = Field(default="unknown", max_length=100)
     entry_id: str = Field(default="?", max_length=100)
     title: str = Field(default="", max_length=500)
+    scheduled_for: str = Field(default="", max_length=50)
 
 
 class NotifyPendingPayload(BaseModel):

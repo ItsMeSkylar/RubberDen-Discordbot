@@ -303,17 +303,27 @@ async def notify_failure(payload: dict, client: discord.Client, channel_ids: dic
 
     error = (payload.get("error") or "unknown error")[:_MAX_MSG_FIELD]
     site = (payload.get("site") or "unknown")[:100]
-    entry_id = (payload.get("entry_id") or "?")[:100]
     title = (payload.get("title") or "")[:500]
+    scheduled_for = (payload.get("scheduled_for") or "")[:50]
+
+    _DISCORD_SITES = {"shiny", "supershiny", "bots"}
+    site_label = "Discord channel" if site in _DISCORD_SITES else "Site"
 
     embed = discord.Embed(title="❌  Cron job failed", color=0xFF0000)
-    embed.add_field(name="Site", value=f"`{site}`", inline=True)
-    embed.add_field(name="Entry", value=f"`{entry_id}`", inline=True)
+    embed.add_field(name=site_label, value=f"`{site}`", inline=True)
+    if scheduled_for:
+        try:
+            from datetime import datetime, timezone
+            dt = datetime.fromisoformat(scheduled_for.replace("Z", "+00:00"))
+            formatted = dt.astimezone(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
+        except ValueError:
+            formatted = scheduled_for
+        embed.add_field(name="Scheduled for", value=formatted, inline=True)
     if title:
         embed.add_field(name="Post", value=title, inline=False)
     embed.add_field(name="Error", value=f"```{error}```", inline=False)
 
-    await _send_with_retry(channel, embed=embed)
+    await _send_with_retry(channel, embed=embed, view=_DeleteView())
 
 
 _PLATFORM_ICONS = {
@@ -331,11 +341,23 @@ _PLATFORM_COLORS = {
 _PENDING_VIEW_TIMEOUT = 7 * 24 * 3600  # 7 days
 
 
-class _PostNotifyView(discord.ui.View):
+class _DeleteView(discord.ui.View):
+    """A view with only a Delete button."""
+
+    def __init__(self):
+        super().__init__(timeout=_PENDING_VIEW_TIMEOUT)
+
+    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, emoji="🗑️", row=0)
+    async def delete_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
+        await interaction.response.defer()
+        await interaction.message.delete()
+
+
+class _PostNotifyView(_DeleteView):
     """Buttons attached to a pending-post notification message."""
 
     def __init__(self, publish_url: str, button_label: str = "Publish now"):
-        super().__init__(timeout=_PENDING_VIEW_TIMEOUT)
+        super().__init__()
         self.add_item(
             discord.ui.Button(
                 label=button_label,
@@ -345,11 +367,6 @@ class _PostNotifyView(discord.ui.View):
                 row=0,
             )
         )
-
-    @discord.ui.button(label="Delete", style=discord.ButtonStyle.danger, emoji="🗑️", row=0)
-    async def delete_btn(self, interaction: discord.Interaction, button: discord.ui.Button):
-        await interaction.response.defer()
-        await interaction.message.delete()
 
 
 async def notify_pending(payload: dict, client: discord.Client, channel_ids: dict):
