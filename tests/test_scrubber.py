@@ -1,3 +1,4 @@
+import asyncio
 import os
 import struct
 import tempfile
@@ -93,6 +94,58 @@ async def test_map_metadata_flag_always_present():
 
     assert "-map_metadata" in captured["args"]
     assert "-1" in captured["args"]
+
+
+# ─────────────────────────────
+# Additional unit tests
+# ─────────────────────────────
+
+async def test_ffmpeg_timeout_returns_original():
+    """When ffmpeg times out, the original bytes are returned unchanged."""
+    proc = MagicMock()
+    proc.communicate = AsyncMock(side_effect=asyncio.TimeoutError())
+    proc.kill = MagicMock()
+    proc.wait = AsyncMock()
+
+    with patch("asyncio.create_subprocess_exec", return_value=proc):
+        result = await scrub_metadata_bytes(b"original video", "clip.mp4")
+
+    assert result == b"original video"
+
+
+async def test_unknown_extension_returns_original_unchanged():
+    """Files with unrecognised extensions are passed through without modification."""
+    data = b"some binary blob"
+    with patch("asyncio.create_subprocess_exec") as mock_exec:
+        result = await scrub_metadata_bytes(data, "document.pdf")
+
+    mock_exec.assert_not_called()
+    assert result == data
+
+
+async def test_image_scrub_failure_returns_original():
+    """If Pillow raises during image scrub, the original bytes are returned."""
+    data = b"corrupt jpeg data"
+    with patch("services.scrubber._scrub_image_bytes", side_effect=Exception("Pillow exploded")):
+        result = await scrub_metadata_bytes(data, "photo.jpg")
+
+    assert result == data
+
+
+async def test_image_scrub_timeout_returns_original():
+    """If the image executor job times out, the original bytes are returned."""
+    data = b"slow jpeg"
+
+    async def _raise_timeout(coro, timeout):
+        raise asyncio.TimeoutError()
+
+    # Also patch _scrub_image_bytes so the executor thread doesn't run Pillow
+    # on invalid bytes and leave an unhandled future exception in the background.
+    with patch("asyncio.wait_for", side_effect=_raise_timeout), \
+         patch("services.scrubber._scrub_image_bytes", return_value=b"would-be-scrubbed"):
+        result = await scrub_metadata_bytes(data, "photo.png")
+
+    assert result == data
 
 
 # ─────────────────────────────

@@ -248,6 +248,14 @@ def test_ready_returns_200_when_bot_ready(http):
     assert resp.json() == {"ok": True}
 
 
+def test_ready_returns_503_when_latency_is_nan(http):
+    """The math.isnan(latency) guard should trigger 503 even when is_ready() is True."""
+    with patch.object(main.client, "is_ready", return_value=True), \
+         patch.object(type(main.client), "latency", new_callable=lambda: property(lambda self: float("nan"))):
+        resp = http.get("/ready")
+    assert resp.status_code == 503
+
+
 # ─────────────────────────────────────────────────────
 # Missing error-path coverage  (fix 3)
 # ─────────────────────────────────────────────────────
