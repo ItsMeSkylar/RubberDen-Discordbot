@@ -85,13 +85,13 @@ def http():
 # Auth — shared across all three endpoints
 # ─────────────────────────────────────────────────────
 
-@pytest.mark.parametrize("path", ["/post-schedule", "/notify-session-expired", "/notify-failure", "/notify-pending"])
+@pytest.mark.parametrize("path", ["/post-schedule", "/notify-failure", "/notify-pending"])
 def test_missing_token_returns_401(http, path):
     resp = http.post(path, json={})
     assert resp.status_code == 401
 
 
-@pytest.mark.parametrize("path", ["/post-schedule", "/notify-session-expired", "/notify-failure", "/notify-pending"])
+@pytest.mark.parametrize("path", ["/post-schedule", "/notify-failure", "/notify-pending"])
 def test_wrong_token_returns_401(http, path):
     resp = http.post(path, json={}, headers={"X-Internal-Token": "wrong"})
     assert resp.status_code == 401
@@ -103,7 +103,6 @@ def test_wrong_token_returns_401(http, path):
 
 @pytest.mark.parametrize("path,body", [
     ("/post-schedule", {"header": "hi"}),
-    ("/notify-session-expired", {}),
     ("/notify-failure", {}),
     ("/notify-pending", {"publish_url": "https://rubberden.com/publish?id=abc"}),
 ])
@@ -125,13 +124,6 @@ def test_post_schedule_success(http):
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
 
-
-def test_notify_session_expired_success(http):
-    DS._set_bot_loop(MagicMock())
-    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_ok()):
-        resp = http.post("/notify-session-expired", json={"site": "mysite"}, headers=_AUTH)
-    assert resp.status_code == 200
-    assert resp.json() == {"ok": True}
 
 
 def test_notify_failure_success(http):
@@ -260,13 +252,6 @@ def test_ready_returns_503_when_latency_is_nan(http):
 # Missing error-path coverage  (fix 3)
 # ─────────────────────────────────────────────────────
 
-def test_notify_session_expired_internal_error_returns_ok_false(http):
-    DS._set_bot_loop(MagicMock())
-    with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_error(RuntimeError("discord down"))):
-        resp = http.post("/notify-session-expired", json={}, headers=_AUTH)
-    assert resp.status_code == 200
-    assert resp.json()["ok"] is False
-
 
 # ─────────────────────────────────────────────────────
 # Rate limiting  (fix 4)
@@ -296,7 +281,6 @@ def test_notify_rate_limited_after_20_requests(http):
 
 @pytest.mark.parametrize("path,body", [
     ("/post-schedule", {"files": [], "header": "hi"}),
-    ("/notify-session-expired", {}),
     ("/notify-failure", {}),
     ("/notify-pending", {"publish_url": "https://rubberden.com/publish?id=abc"}),
 ])

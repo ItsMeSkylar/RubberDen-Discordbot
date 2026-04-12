@@ -84,9 +84,6 @@ class PostSchedulePayload(BaseModel):
         return self
 
 
-class NotifySessionExpiredPayload(BaseModel):
-    site: str = Field(default="unknown", max_length=100)
-
 
 class NotifyFailurePayload(BaseModel):
     error: str = Field(default="unknown error", max_length=1800)
@@ -186,15 +183,6 @@ async def post_schedule(request: Request, payload: PostSchedulePayload, _: None 
         "post_schedule",
     )
 
-
-@app.post("/notify-session-expired")
-@_limiter.limit("20/minute")
-async def notify_session_expired(request: Request, payload: NotifySessionExpiredPayload, _: None = Depends(_auth)):
-    return await _dispatch(
-        discord_scripts.notify_session_expired(payload.model_dump(), _client, CHANNEL_IDS),
-        TIMEOUT_NOTIFY,
-        "notify_session_expired",
-    )
 
 
 @app.post("/notify-failure")

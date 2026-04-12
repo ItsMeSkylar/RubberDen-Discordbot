@@ -280,22 +280,6 @@ async def post_payload(
     log.info("sent to #%s: %d file(s)", channel.name, len(downloaded))
 
 
-async def notify_session_expired(payload: dict, client: discord.Client, channel_ids: dict):
-    channel_id = channel_ids["bots"]
-    channel = client.get_channel(channel_id) or await client.fetch_channel(channel_id)
-
-    site = (payload.get("site") or "unknown")[:100]
-    platform = site.capitalize()
-
-    await _send_with_retry(
-        channel,
-        content=(
-            f"⚠️ **Session expired: {platform}**\n"
-            f"Run this on your local machine to refresh:\n"
-            f"```\npython scripts/refresh-session.py {site.lower()}\n```"
-        ),
-    )
-
 
 async def notify_failure(payload: dict, client: discord.Client, channel_ids: dict):
     channel_id = channel_ids["bots"]

@@ -1,11 +1,11 @@
-"""Unit tests for notify_pending and notify_session_expired discord functions."""
+"""Unit tests for notify_pending discord function."""
 import asyncio
 from unittest.mock import AsyncMock, MagicMock
 
 import discord
 import pytest
 
-from services.discord_scripts import notify_pending, notify_session_expired
+from services.discord_scripts import notify_pending
 
 CHANNEL_IDS = {"bots": 111}
 
@@ -20,35 +20,6 @@ def _channel():
     ch = MagicMock()
     ch.send = AsyncMock()
     return ch
-
-
-# ─────────────────────────────
-# notify_session_expired
-# ─────────────────────────────
-
-async def test_session_expired_message_contains_site_name():
-    channel = _channel()
-    await notify_session_expired({"site": "patreon"}, _client(channel), CHANNEL_IDS)
-
-    content = channel.send.call_args.kwargs["content"]
-    assert "patreon" in content.lower()
-
-
-async def test_session_expired_message_contains_refresh_script():
-    channel = _channel()
-    await notify_session_expired({"site": "twitter"}, _client(channel), CHANNEL_IDS)
-
-    content = channel.send.call_args.kwargs["content"]
-    assert "refresh-session.py" in content
-    assert "twitter" in content
-
-
-async def test_session_expired_defaults_to_unknown_site():
-    channel = _channel()
-    await notify_session_expired({}, _client(channel), CHANNEL_IDS)
-
-    content = channel.send.call_args.kwargs["content"]
-    assert "unknown" in content.lower()
 
 
 # ─────────────────────────────
