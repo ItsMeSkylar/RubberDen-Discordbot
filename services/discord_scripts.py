@@ -437,12 +437,11 @@ def setup(
     _http_started = False
     _synced = False
 
-    client.add_view(_DeleteView())
-
     @client.event
     async def on_ready():
         nonlocal _http_started, _synced
         _set_bot_loop(asyncio.get_running_loop())
+        client.add_view(_DeleteView())
 
         if not _http_started:
             _http_started = True
