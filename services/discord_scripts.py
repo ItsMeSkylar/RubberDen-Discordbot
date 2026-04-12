@@ -317,6 +317,12 @@ _PLATFORM_ICONS = {
     "bluesky": "☁️",
 }
 
+_PLATFORM_COLORS = {
+    "twitter": 0x1D9BF0,
+    "patreon": 0xF96854,
+    "bluesky": 0x0085FF,
+}
+
 _PENDING_VIEW_TIMEOUT = 7 * 24 * 3600  # 7 days
 
 
@@ -353,11 +359,12 @@ async def notify_pending(payload: dict, client: discord.Client, channel_ids: dic
 
     platform = site.capitalize()
     icon = _PLATFORM_ICONS.get(site.lower(), "📋")
+    color = _PLATFORM_COLORS.get(site.lower(), 0x7B2FBE)
 
     if failed:
         embed = discord.Embed(
             title=f"❌  {platform} post failed",
-            color=0xE53935,
+            color=color,
         )
         if title:
             embed.add_field(name="Post", value=title, inline=False)
@@ -367,7 +374,7 @@ async def notify_pending(payload: dict, client: discord.Client, channel_ids: dic
     elif reminder:
         embed = discord.Embed(
             title=f"⏰  Reminder: {platform} post still pending",
-            color=0xFB8C00,
+            color=color,
         )
         if title:
             embed.add_field(name="Post", value=title, inline=False)
@@ -376,11 +383,10 @@ async def notify_pending(payload: dict, client: discord.Client, channel_ids: dic
     else:
         embed = discord.Embed(
             title=f"{icon}  {platform} post ready",
-            color=0x7B2FBE,
+            color=color,
         )
         if title:
             embed.add_field(name="Post", value=title, inline=False)
-        embed.add_field(name="Platform", value=platform, inline=True)
         embed.set_footer(text="Click Publish now to send it live")
         view = _PostNotifyView(publish_url)
         ping = " ".join(f"<@{uid}>" for uid in NOTIFY_PING_IDS)
