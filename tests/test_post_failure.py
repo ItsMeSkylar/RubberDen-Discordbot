@@ -11,6 +11,16 @@ def _client(channel):
     return c
 
 
+def _embed_text(channel) -> str:
+    """Collect all text from the embed passed to channel.send."""
+    embed = channel.send.call_args.kwargs["embed"]
+    parts = [embed.title or ""]
+    for field in embed.fields:
+        parts.append(field.name)
+        parts.append(field.value)
+    return " ".join(parts)
+
+
 async def test_failure_message_contains_payload_fields():
     channel = MagicMock()
     channel.send = AsyncMock()
@@ -21,10 +31,10 @@ async def test_failure_message_contains_payload_fields():
         CHANNEL_IDS,
     )
 
-    msg = channel.send.call_args.kwargs["content"]
-    assert "mysite" in msg
-    assert "42" in msg
-    assert "timeout" in msg
+    text = _embed_text(channel)
+    assert "mysite" in text
+    assert "42" in text
+    assert "timeout" in text
 
 
 async def test_failure_defaults_when_payload_empty():
@@ -33,6 +43,30 @@ async def test_failure_defaults_when_payload_empty():
 
     await notify_failure({}, _client(channel), CHANNEL_IDS)
 
-    msg = channel.send.call_args.kwargs["content"]
-    assert "unknown error" in msg
-    assert "unknown" in msg
+    text = _embed_text(channel)
+    assert "unknown error" in text
+    assert "unknown" in text
+
+
+async def test_failure_message_includes_title_when_present():
+    channel = MagicMock()
+    channel.send = AsyncMock()
+
+    await notify_failure(
+        {"error": "boom", "site": "patreon", "entry_id": "7", "title": "My Post"},
+        _client(channel),
+        CHANNEL_IDS,
+    )
+
+    text = _embed_text(channel)
+    assert "My Post" in text
+
+
+async def test_failure_embed_is_red():
+    channel = MagicMock()
+    channel.send = AsyncMock()
+
+    await notify_failure({"error": "x", "site": "s", "entry_id": "1"}, _client(channel), CHANNEL_IDS)
+
+    embed = channel.send.call_args.kwargs["embed"]
+    assert embed.colour.value == 0xFF0000
