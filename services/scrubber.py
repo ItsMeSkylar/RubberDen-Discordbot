@@ -26,7 +26,7 @@ def _scrub_image_bytes(data: bytes) -> bytes:
     if img.mode in ("RGBA", "P", "LA"):
         img = img.convert("RGB")
     out = io.BytesIO()
-    img.save(out, format="JPEG", quality=95)
+    img.save(out, format="JPEG", quality=95, exif=b"")
     return out.getvalue()
 
 
