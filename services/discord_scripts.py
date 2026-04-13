@@ -133,8 +133,8 @@ async def _download_file(
     # Reject traversal sequences and Windows drive letters.
     if ".." in normalized or (len(file_path) >= 2 and file_path[1] == ":"):
         raise ValueError(f"Rejected unsafe file path: {file_path!r}")
-    # Absolute paths are only allowed under the expected content root.
-    if normalized.startswith("/") and not normalized.startswith(_ALLOWED_PREFIX):
+    # Absolute paths are only allowed under the expected content roots.
+    if normalized.startswith("/") and not any(normalized.startswith(p) for p in _ALLOWED_PREFIXES):
         raise ValueError(f"Rejected unsafe file path: {file_path!r}")
 
     filename = file_path.rsplit("/", 1)[-1]
@@ -202,7 +202,7 @@ async def _download_file(
 # ─────────────────────────────
 
 _MAX_MSG_FIELD = 1800  # leave headroom below Discord's 2000-char limit
-_ALLOWED_PREFIX = "/contents/"
+_ALLOWED_PREFIXES = ("/contents/", "/schedules/")
 _VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 
