@@ -178,20 +178,18 @@ def test_notify_pending_failure_alert_success(http):
 # Error propagation
 # ─────────────────────────────────────────────────────
 
-def test_post_schedule_internal_error_returns_ok_false(http):
+def test_post_schedule_internal_error_returns_500(http):
     DS._set_bot_loop(MagicMock())
     with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_error(RuntimeError("boom"))):
         resp = http.post("/post-schedule", json={"files": [], "header": "hi"}, headers=_AUTH)
-    assert resp.status_code == 200
-    assert resp.json()["ok"] is False
+    assert resp.status_code == 500
 
 
-def test_notify_failure_internal_error_returns_ok_false(http):
+def test_notify_failure_internal_error_returns_500(http):
     DS._set_bot_loop(MagicMock())
     with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_error(RuntimeError("discord down"))):
         resp = http.post("/notify-failure", json={}, headers=_AUTH)
-    assert resp.status_code == 200
-    assert resp.json()["ok"] is False
+    assert resp.status_code == 500
 
 
 # ─────────────────────────────────────────────────────
@@ -284,9 +282,8 @@ def test_notify_rate_limited_after_20_requests(http):
     ("/notify-failure", {}),
     ("/notify-pending", {"publish_url": "https://rubberden.com/publish?id=abc"}),
 ])
-def test_endpoint_timeout_returns_ok_false(http, path, body):
+def test_endpoint_timeout_returns_500(http, path, body):
     DS._set_bot_loop(MagicMock())
     with patch("asyncio.run_coroutine_threadsafe", side_effect=_rtcs_error(asyncio.TimeoutError())):
         resp = http.post(path, json=body, headers=_AUTH)
-    assert resp.status_code == 200
-    assert resp.json()["ok"] is False
+    assert resp.status_code == 500
