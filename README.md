@@ -128,7 +128,7 @@ All endpoints except `/health` and `/ready` require the `X-Internal-Token` heade
     "footer": "optional embed footer",
     "files": [
         {
-            "file_dir": "/Apps/Shared/content/path/to/file.jpg",
+            "file_dir": "/contents/path/to/file.jpg",
             "filename": "file.jpg",
             "description": "optional caption"
         }

@@ -202,7 +202,7 @@ async def _download_file(
 # ─────────────────────────────
 
 _MAX_MSG_FIELD = 1800  # leave headroom below Discord's 2000-char limit
-_ALLOWED_PREFIX = "/Apps/Shared/content/"
+_ALLOWED_PREFIX = "/contents/"
 _VIDEO_EXTENSIONS = {".mp4", ".mov", ".m4v", ".webm"}
 _IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
 

@@ -150,10 +150,10 @@ async def _dispatch(coro, timeout: float, name: str):
     except asyncio.TimeoutError:
         fut.cancel()
         log.error("%s timed out", name)
-        return {"ok": False, "error": "timeout"}
+        raise HTTPException(status_code=500, detail="timeout")
     except Exception as e:
         log.error("%s failed: %s", name, e, exc_info=True)
-        return {"ok": False, "error": str(e)}
+        raise HTTPException(status_code=500, detail=str(e))
     return {"ok": True}
 
 
