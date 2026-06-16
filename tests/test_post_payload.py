@@ -80,6 +80,80 @@ async def test_video_uses_thumbnail_and_adds_video_link():
     assert any("https://cdn/clip.mp4" in f.value for f in embed.fields)
 
 
+async def test_multiple_images_share_one_gallery_url():
+    """Consecutive images get the same embed url so Discord merges them into a grid."""
+    channel = _channel()
+    payload = {
+        "files": [
+            {"filename": "pics/a.png", "description": "first"},
+            {"filename": "pics/b.png", "description": "second"},
+            {"filename": "pics/c.png", "description": ""},
+        ],
+    }
+    with patch("services.discord_scripts._get_http_session", AsyncMock(return_value=_mock_session(content_type="image/png"))):
+        await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
+
+    embeds = channel.send.call_args.kwargs["embeds"]
+    assert len(embeds) == 3
+    # All three share one url (single merged gallery).
+    assert len({e.url for e in embeds}) == 1
+    # Only the first embed renders text; it collects both non-empty descriptions.
+    assert embeds[0].description == "first\nsecond"
+    assert embeds[1].description is None
+    assert embeds[2].description is None
+
+
+async def test_more_than_four_images_split_into_separate_galleries():
+    channel = _channel()
+    payload = {"files": [{"filename": f"pics/{i}.png"} for i in range(5)]}
+    with patch("services.discord_scripts._get_http_session", AsyncMock(return_value=_mock_session(content_type="image/png"))):
+        await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
+
+    embeds = channel.send.call_args.kwargs["embeds"]
+    assert len(embeds) == 5
+    # First 4 in one gallery, 5th in a second.
+    assert len({e.url for e in embeds}) == 2
+    assert embeds[0].url == embeds[3].url
+    assert embeds[4].url != embeds[0].url
+
+
+async def test_video_between_images_breaks_the_gallery_run():
+    channel = _channel()
+    payload = {
+        "files": [
+            {"filename": "pics/a.png"},
+            {"filename": "clips/clip.mp4"},
+            {"filename": "pics/b.png"},
+        ],
+    }
+
+    def _session_for(path, **_):
+        # The video item carries a video link; images do not.
+        is_video = str(path).endswith(".mp4")
+        return _mock_session(
+            content_type="video/mp4" if is_video else "image/png",
+            video_link="https://cdn/clip.mp4" if is_video else None,
+        )
+
+    # Each download builds its own response keyed on the requested path.
+    session = MagicMock()
+
+    def _get(url, params=None, headers=None):
+        return _session_for(params["path"]).get.return_value
+
+    session.get.side_effect = _get
+    with patch("services.discord_scripts._get_http_session", AsyncMock(return_value=session)):
+        await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
+
+    embeds = channel.send.call_args.kwargs["embeds"]
+    assert len(embeds) == 3
+    # The two images flank a video, so they land in separate galleries.
+    assert embeds[0].url != embeds[2].url
+    # The video embed has no gallery url and carries the link field.
+    assert embeds[1].url is None
+    assert any("https://cdn/clip.mp4" in f.value for f in embeds[1].fields)
+
+
 async def test_missing_filename_raises():
     channel = _channel()
     payload = {"files": [{"description": "no path"}]}
