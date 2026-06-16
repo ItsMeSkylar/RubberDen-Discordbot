@@ -80,14 +80,14 @@ async def test_video_uses_thumbnail_and_adds_video_link():
     assert any("https://cdn/clip.mp4" in f.value for f in embed.fields)
 
 
-async def test_multiple_images_share_one_gallery_url():
-    """Consecutive images get the same embed url so Discord merges them into a grid."""
+async def test_undescribed_images_share_one_gallery_url():
+    """Consecutive images with no description get the same embed url (merged grid)."""
     channel = _channel()
     payload = {
         "files": [
-            {"filename": "pics/a.png", "description": "first"},
-            {"filename": "pics/b.png", "description": "second"},
-            {"filename": "pics/c.png", "description": ""},
+            {"filename": "pics/a.png"},
+            {"filename": "pics/b.png"},
+            {"filename": "pics/c.png"},
         ],
     }
     with patch("services.discord_scripts._get_http_session", AsyncMock(return_value=_mock_session(content_type="image/png"))):
@@ -95,15 +95,37 @@ async def test_multiple_images_share_one_gallery_url():
 
     embeds = channel.send.call_args.kwargs["embeds"]
     assert len(embeds) == 3
-    # All three share one url (single merged gallery).
+    # All three share one url (single merged gallery), none carry text.
     assert len({e.url for e in embeds}) == 1
-    # Only the first embed renders text; it collects both non-empty descriptions.
-    assert embeds[0].description == "first\nsecond"
+    assert embeds[0].url is not None
+    assert all(e.description is None for e in embeds)
+
+
+async def test_described_image_gets_its_own_embed():
+    """A described image is standalone; undescribed neighbours still merge."""
+    channel = _channel()
+    payload = {
+        "files": [
+            {"filename": "pics/a.png", "description": "solo caption"},
+            {"filename": "pics/b.png"},
+            {"filename": "pics/c.png"},
+        ],
+    }
+    with patch("services.discord_scripts._get_http_session", AsyncMock(return_value=_mock_session(content_type="image/png"))):
+        await post_payload(payload, _client(channel), CHANNEL_IDS, BASE_URL, TOKEN)
+
+    embeds = channel.send.call_args.kwargs["embeds"]
+    assert len(embeds) == 3
+    # Described image: own embed, carries the caption, no gallery url.
+    assert embeds[0].description == "solo caption"
+    assert embeds[0].url is None
+    # The two undescribed images merge into one gallery.
+    assert embeds[1].url is not None
+    assert embeds[1].url == embeds[2].url
     assert embeds[1].description is None
-    assert embeds[2].description is None
 
 
-async def test_more_than_four_images_split_into_separate_galleries():
+async def test_more_than_four_undescribed_images_split_into_separate_galleries():
     channel = _channel()
     payload = {"files": [{"filename": f"pics/{i}.png"} for i in range(5)]}
     with patch("services.discord_scripts._get_http_session", AsyncMock(return_value=_mock_session(content_type="image/png"))):

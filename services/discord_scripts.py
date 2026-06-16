@@ -254,39 +254,41 @@ async def post_payload(
     embeds = []
     attachments = []
 
-    # Consecutive images are merged into gallery embeds: every embed in a run
-    # shares one `url`, so Discord collapses them into a single grid (max 4).
-    # Videos and other files break the run and keep their own embed (they need a
-    # per-item thumbnail and "Link to video" field, which a merge would drop).
+    # Image embed strategy:
+    #   - An image WITH a description gets its own embed, so its caption shows
+    #     (a merged gallery only renders the first embed's text).
+    #   - Consecutive images WITHOUT descriptions are merged: every embed in the
+    #     run shares one `url`, so Discord collapses them into a grid (max 4).
+    # A described image, video, or other file breaks the current gallery run.
     group_idx = 0          # bumped per run so each gallery gets a distinct url
-    run_len = 0            # images placed in the current run
+    run_len = 0            # undescribed images placed in the current run
     run_url = None
-    run_first_embed = None  # only the first embed of a run renders text
 
     for filename, data, desc, ct, video_link, file_path in downloaded:
         is_video = file_path.lower().endswith(tuple(_VIDEO_EXTENSIONS)) or bool(video_link)
 
         if not is_video and _is_image(filename, ct):
+            attachments.append(discord.File(fp=io.BytesIO(data), filename=filename))
+
+            if desc:
+                # Described image → standalone embed (breaks any open run).
+                run_len = 0
+                embed = discord.Embed(description=desc, colour=0x9900FF)
+                embed.set_image(url=f"attachment://{filename}")
+                if footer_text:
+                    embed.set_footer(text=footer_text)
+                embeds.append(embed)
+                continue
+
+            # Undescribed image → merge into a gallery (shared url, max 4).
             if run_len == 0 or run_len >= _GALLERY_MAX:
                 group_idx += 1
                 run_url = f"{base_url}#{group_idx}"
                 run_len = 0
-                run_first_embed = None
-
             embed = discord.Embed(colour=0x9900FF, url=run_url)
-            attachments.append(discord.File(fp=io.BytesIO(data), filename=filename))
             embed.set_image(url=f"attachment://{filename}")
-
-            if run_len == 0:
-                run_first_embed = embed
-                if footer_text:
-                    embed.set_footer(text=footer_text)
-            # Per-image descriptions all collect on the run's first (and only
-            # text-rendering) embed so none are silently dropped by the merge.
-            if desc:
-                prev = run_first_embed.description
-                run_first_embed.description = f"{prev}\n{desc}" if prev else desc
-
+            if run_len == 0 and footer_text:
+                embed.set_footer(text=footer_text)
             embeds.append(embed)
             run_len += 1
             continue
